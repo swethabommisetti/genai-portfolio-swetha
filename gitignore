@@ -32,8 +32,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-
 # Allow specific env files needed for build
 !environments/dev/.env
 !environments/qa/.env
 !environments/prod/.env
+
