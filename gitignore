@@ -37,3 +37,5 @@ Thumbs.db
 !environments/qa/.env
 !environments/prod/.env
 
+daytoday.txt
+Dockerfile_old.txt
