@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual envs
+.venv/
+env/
+ENV/
+venv/
+
+# dotenv environment files
+.env
+*.env
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# Docker junk
+*.log
+*.pid
+*.gz
+*.swp
+
+# System
+.DS_Store
+Thumbs.db
