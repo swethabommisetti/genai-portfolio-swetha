@@ -2,6 +2,7 @@ import streamlit as st
 
 st.title("📸 Receipt Scanner Agent")
 st.write("Upload a receipt image to get suggestions based on purchase history.")
+st.write("AwesomeJob")
 
 uploaded = st.file_uploader("Upload your receipt", type=["jpg", "png", "jpeg"])
 if uploaded:

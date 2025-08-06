@@ -10,4 +10,5 @@ Use the sidebar to access the available GenAI agents.
 
 - 📸 **Receipt Scanner** — See what you've already purchased
 - 📚 **Book Recommender** — Find books for your kids based on themes
+- This is Awesome Job
 """)

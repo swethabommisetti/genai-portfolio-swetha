@@ -1,12 +1,8 @@
 streamlit
-easyocr
-pillow
 langchain
 langchain-core
-langchain-openai
-langchain-community
-faiss-cpu
+langchain-openai      # or use `langchain-community` if routing to your API
 tiktoken
 python-dotenv
-jupyterlab
-opencv-python-headless
+streamlit-authenticator
+requests              # To call the MiniGPT API
