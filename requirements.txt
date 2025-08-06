@@ -1,0 +1,12 @@
+streamlit
+easyocr
+pillow
+langchain
+langchain-core
+langchain-openai
+langchain-community
+faiss-cpu
+tiktoken
+python-dotenv
+jupyterlab
+opencv-python-headless

@@ -1,0 +1,20 @@
+Step1: Run Docker Desktop 
+Step2: Run Docker : docker-compose up 
+step3: to stop: docker-compose down 
+
+Manually run/optional 
+        a. To open the access to a url from iphone in local network
+		       docker run -p 8501:8501 --env-file=./environments/dev/.env -v %cd%:/app genai-portfolio-swetha:dev  
+			  a.i in commandprompt run : ipconfig - get the ipv4 address
+			  a.ii in safari on your iphone http://<your-local-IP>:8501 - plug the ipaddress in step a.i 
+        b. To open jupyter notebook 
+		       docker run -p 8888:8888 --env-file=./environments/dev/.env -v %cd%:/app genai-portfolio-swetha:dev
+					It gives a URL that looks like : http://127.0.0.1:8888/lab?token=<your-token>
+					paste this URL in chrome browser
+					
+					
+
+If we have to rebuild the docker 
+   Navigate to the folder genai-portfolio-swetha inside documents and run this from command line
+   
+   docker build -t genai-portfolio-swetha:dev --build-arg ENV=dev .
