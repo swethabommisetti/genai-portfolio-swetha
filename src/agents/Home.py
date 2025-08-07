@@ -1,9 +1,16 @@
 import streamlit as st
 from streamlit_analytics import start_tracking
 
+import os
+
+
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
-# ✅ Start tracking (no `with`)
+
+# ✅ Ensure writable path exists
+os.makedirs("analytics", exist_ok=True)
+
+# ✅ Start tracking — write to a safe path
 start_tracking()
 
 # 🎯 Your UI
