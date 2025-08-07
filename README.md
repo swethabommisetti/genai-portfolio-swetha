@@ -64,5 +64,5 @@ https://swetha-genai.streamlit.app
 ---
 
 ## 📧 Contact
+Best Method in Resume
 
-Swetha (AI/ML Engineer in transition) — _Reach out via GitHub or LinkedIn for demo credentials_
