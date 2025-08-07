@@ -13,7 +13,7 @@ services:
       - ENV_MODE=dev
     volumes:
       - .:/app
-    command: streamlit run src/agents/Home.py --server.port=8501 --server.address=0.0.0.0
+    command: streamlit run src/Home.py --server.port=8501 --server.address=0.0.0.0
 
   jupyter:
     build:
