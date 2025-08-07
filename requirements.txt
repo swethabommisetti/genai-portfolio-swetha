@@ -4,5 +4,6 @@ langchain-core
 langchain-openai      # or use `langchain-community` if routing to your API
 tiktoken
 python-dotenv
-streamlit-authenticator
+streamlit-analytics
 requests              # To call the MiniGPT API
+jupyterlab

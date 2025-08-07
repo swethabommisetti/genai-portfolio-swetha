@@ -1,7 +1,11 @@
 # src/agents/Home.py
 
 import streamlit as st
+from streamlit_analytics import TrackPage
 
+with TrackPage():
+    st.title("📸 Receipt Scanner")
+    
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
 st.title("👋 Welcome to Swetha's GenAI Agent Suite")
