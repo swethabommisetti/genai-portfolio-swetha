@@ -1,4 +1,8 @@
 import streamlit as st
+from utils.tracking import log_page_visit
+
+# Track receipt scanner page visit
+log_page_visit("Receipt Scanner")
 
 st.title("📸 Receipt Scanner Agent")
 st.write("Upload a receipt image to get suggestions based on purchase history.")

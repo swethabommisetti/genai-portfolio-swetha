@@ -1,24 +1,20 @@
 import streamlit as st
-from streamlit_analytics import start_tracking
-
-import os
-
+from utils.tracking import log_page_visit
 
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
+# Track home page visit
+log_page_visit("Home Page")
 
-# ✅ Ensure writable path exists
-os.makedirs("analytics", exist_ok=True)
+st.title("Welcome to Swetha's GenAI Portfolio 👋")
 
-# ✅ Start tracking — write to a safe path
-start_tracking()
-
-# 🎯 Your UI
-st.title("👋 Welcome to Swetha's GenAI Agent Suite")
 st.markdown("""
+Welcome to my Journey 
+
 Use the sidebar to access the available GenAI agents.
 
 - 📸 **Receipt Scanner** — See what you've already purchased  
 - 📚 **Book Recommender** — Find books for your kids based on themes  
-- This is Awesome Job
+
 """)
+
