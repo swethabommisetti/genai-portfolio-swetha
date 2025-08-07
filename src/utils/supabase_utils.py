@@ -5,7 +5,7 @@ import streamlit as st
 def get_supabase_client():
     #url = st.secrets["SUPABASE_URL"]
     #key = st.secrets["SUPABASE_KEY"]
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["SUPABASE_SERVICE_KEY"]
+    url = st.secrets["SUPABASE"]["URL"]
+    key = st.secrets["SUPABASE"]["SUPABASE_SERVICE_KEY"]
     
     return create_client(url, key)
