@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.tracking import log_page_visit
-from utils.email_utils import prompt_for_email
+from utils.email_utils import prompt_for_optional_email
 
 prompt_for_optional_email()
 
