@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 /src/utils/__pycache__/
+/.streamlit/secrets.toml
 *.py[cod]
 *$py.class
 
