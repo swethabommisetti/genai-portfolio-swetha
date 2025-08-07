@@ -1,0 +1,14 @@
+import streamlit as st
+import re
+
+def is_valid_email(email):
+    return re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
+
+def prompt_for_optional_email():
+    email = st.text_input(
+        "Leave your email if you'd like me to know you visited (recruiters: please enter your work email!)"
+    )
+    if email and is_valid_email(email):
+        st.session_state["user_email"] = email
+    else:
+        st.session_state["user_email"] = "unknown"
