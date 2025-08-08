@@ -3,13 +3,12 @@ from datetime import datetime
 import io
 import re
 
-#from utils.tracking import log_page_visit
 from utils.supabase_utils import get_supabase_client
 from utils.tracking import log_once_per_page
 
 def run_receipt_scanner():
     # ---------------------------------
-    # 1. Track page visit
+    # 1. Track visit once per session
     # ---------------------------------
     if "user_email" in st.session_state and st.session_state["user_email"]:
         log_once_per_page("Receipt Scanner")
@@ -31,14 +30,14 @@ def run_receipt_scanner():
         st.image(uploaded, caption="🖼️ Preview: Uploaded Receipt", use_column_width=True)
 
         # ---------------------------------
-        # 4. Filename generation
+        # 4. Generate safe filename
         # ---------------------------------
         user_email_raw = st.session_state.get("user_email", "anonymous")
         user_email_clean = user_email_raw.replace("@", "_at_").replace(".", "_dot_")
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
-        original_filename_raw = uploaded.name if uploaded.name else "receipt"
-        original_name_no_ext = re.sub(r'\.[^.]+$', '', original_filename_raw)  # remove file extension
+        original_filename_raw = uploaded.name or "receipt"
+        original_name_no_ext = re.sub(r'\.[^.]+$', '', original_filename_raw)
         original_name_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', original_name_no_ext).lower()
 
         filename = f"{original_name_clean}_{user_email_clean}_{timestamp}.jpg"
@@ -47,7 +46,7 @@ def run_receipt_scanner():
         visitor_id = st.session_state.get("visitor_id")
 
         # ---------------------------------
-        # 5. Upload to Supabase Storage
+        # 5. Upload to Supabase bucket
         # ---------------------------------
         file_bytes = uploaded.read()
         upload_res = supabase.storage.from_(bucket_name).upload(
@@ -55,15 +54,15 @@ def run_receipt_scanner():
             file=file_bytes,
             file_options={
                 "content-type": mime_type,
-                "x-upsert": "false"  # prevent overwriting
+                "x-upsert": "false"
             }
         )
 
-        if upload_res.status_code == 200:
+        if upload_res.get("error") is None:
             st.success("✅ File uploaded to Supabase!")
 
             # ---------------------------------
-            # 6. Insert metadata into receipt_files table
+            # 6. Insert metadata into table
             # ---------------------------------
             supabase.table("receipt_files").insert({
                 "filename": filename,
@@ -74,7 +73,7 @@ def run_receipt_scanner():
             }).execute()
 
             # ---------------------------------
-            # 7. Generate signed URL for preview
+            # 7. Display signed URL
             # ---------------------------------
             signed_url = supabase.storage.from_(bucket_name).create_signed_url(
                 path=filename,
@@ -83,4 +82,5 @@ def run_receipt_scanner():
             st.image(signed_url, caption="🔐 Secure Preview (valid for 10 min)", use_column_width=True)
 
         else:
-            st.error("❌ Upload failed. Check Supabase Storage permissions or filename format.")
+            error_msg = upload_res["error"].get("message", "Unknown error")
+            st.error(f"❌ Upload failed: {error_msg}")
