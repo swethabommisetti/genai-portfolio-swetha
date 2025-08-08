@@ -14,10 +14,11 @@ def fetch_or_insert_visitor_id(email: str) -> str:
         return None
 
     # Step 1: Try fetch
-    result = get_supabase_client.table("visitors").select("id").eq("email", email).limit(1).execute()
+    supabase = get_supabase_client()
+    result = supabase.table("visitors").select("id").eq("email", email).limit(1).execute()
     if result.data:
         return result.data[0]["id"]
 
     # Step 2: Insert
-    insert = get_supabase_client.table("visitors").insert({"email": email}).execute()
+    insert = supabase.table("visitors").insert({"email": email}).execute()
     return insert.data[0]["id"]
