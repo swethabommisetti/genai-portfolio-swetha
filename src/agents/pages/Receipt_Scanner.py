@@ -89,18 +89,7 @@ def run_receipt_scanner():
                 expires_in=600  # 10 minutes
             )
 
-            if signed_res.data:
-                st.image(
-                    signed_res.data.get("signedURL"),
-                    caption="🔐 Secure Preview (valid for 10 min)",
-                    use_column_width=True,
-                )
-            else:
-                err = getattr(signed_res.error, "message", "Unknown error")
-                st.error(f"❌ Could not generate signed URL: {err}")
-
-
-            st.image(signed_url, caption="🔐 Secure Preview (valid for 10 min)", use_column_width=True)
+            
         else:
             error_msg = getattr(upload_res.error, "message", "Unknown error")
 
