@@ -3,7 +3,7 @@ from datetime import datetime
 import io
 import re
 
-from utils.tracking import log_page_visit
+#from utils.tracking import log_page_visit
 from utils.supabase_utils import get_supabase_client
 from utils.tracking import log_once_per_page
 

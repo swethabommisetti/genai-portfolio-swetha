@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 
-from utils.tracking import log_page_visit
+#from utils.tracking import log_page_visit
 from utils.email_utils import prompt_for_optional_email
 from agents.pages.Receipt_Scanner import run_receipt_scanner
 from utils.tracking import log_once_per_page
