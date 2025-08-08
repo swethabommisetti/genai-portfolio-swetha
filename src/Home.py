@@ -22,10 +22,11 @@ page = st.sidebar.selectbox(
 base_path = os.path.dirname(__file__)  # gives you /mount/src/genai-portfolio-swetha/src
 if page == "Receipt Scanner":
     receipt_script = os.path.join(base_path, "agents/pages/Receipt_Scanner.py")
-    runpy.run_path(receipt_script, run_name="__main__")
+    
     
 elif page == "Book Recommender":
-    runpy.run_path("/agents\pages\Book_Recommender.py", run_name="__main__")
+    receipt_script = os.path.join(base_path, "agents/pages/Receipt_Scanner.py")
+    
 else:
     st.title("Welcome to Swetha's GenAI Portfolio 👋")
     st.markdown(
