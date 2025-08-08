@@ -12,7 +12,7 @@ def run_receipt_scanner():
     # 1. Track page visit
     # ---------------------------------
     if "user_email" in st.session_state and st.session_state["user_email"]:
-    log_once_per_page("Receipt Scanner")
+        log_once_per_page("Receipt Scanner")
 
     st.title("📸 Receipt Scanner Agent")
     st.write("Upload a receipt image to get suggestions based on purchase history.")
