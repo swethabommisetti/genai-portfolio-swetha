@@ -89,7 +89,7 @@ def run_receipt_scanner():
                 expires_in=600  # 10 minutes
             )
 
-            if signed_res.error is None and signed_res.data:
+            if signed_res.data:
                 st.image(
                     signed_res.data.get("signedURL"),
                     caption="🔐 Secure Preview (valid for 10 min)",
