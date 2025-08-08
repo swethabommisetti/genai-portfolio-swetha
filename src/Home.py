@@ -2,6 +2,7 @@ import streamlit as st
 import runpy
 from utils.tracking import log_page_visit
 from utils.email_utils import prompt_for_optional_email
+import os
 
 # Optional email capture
 email = prompt_for_optional_email()
@@ -18,8 +19,11 @@ page = st.sidebar.selectbox(
     ("Home", "Receipt Scanner", "Book Recommender"),
 )
 
+base_path = os.path.dirname(__file__)  # gives you /mount/src/genai-portfolio-swetha/src
 if page == "Receipt Scanner":
-    runpy.run_path("/agents/pages/Receipt_Scanner.py", run_name="__main__")
+    receipt_script = os.path.join(base_path, "agents/pages/Receipt_Scanner.py")
+    runpy.run_path(receipt_script, run_name="__main__")
+    
 elif page == "Book Recommender":
     runpy.run_path("/agents\pages\Book_Recommender.py", run_name="__main__")
 else:
