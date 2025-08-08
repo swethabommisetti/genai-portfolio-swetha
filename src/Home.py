@@ -19,9 +19,9 @@ page = st.sidebar.selectbox(
 )
 
 if page == "Receipt Scanner":
-    runpy.run_path("src\agents\pages\Receipt_Scanner.py", run_name="__main__")
+    runpy.run_path(".\src\agents\pages\Receipt_Scanner.py", run_name="__main__")
 elif page == "Book Recommender":
-    runpy.run_path("src\agents\pages\Book_Recommender.py", run_name="__main__")
+    runpy.run_path(".\src\agents\pages\Book_Recommender.py", run_name="__main__")
 else:
     st.title("Welcome to Swetha's GenAI Portfolio 👋")
     st.markdown(
