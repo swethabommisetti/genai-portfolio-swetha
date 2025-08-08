@@ -4,6 +4,7 @@ import os
 from utils.tracking import log_page_visit
 from utils.email_utils import prompt_for_optional_email
 from agents.pages.Receipt_Scanner import run_receipt_scanner
+from utils.tracking import log_once_per_page
 
 # Optional email capture
 email = prompt_for_optional_email()
@@ -11,8 +12,8 @@ email = prompt_for_optional_email()
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
 # Log visit once user has interacted with the email box
-if "user_email" in st.session_state:
-    log_page_visit("Home Page")
+if "user_email" in st.session_state and st.session_state["user_email"]:
+    log_once_per_page("Home Page")
 
 # Sidebar menu
 page = st.sidebar.selectbox(

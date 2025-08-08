@@ -5,12 +5,14 @@ import re
 
 from utils.tracking import log_page_visit
 from utils.supabase_utils import get_supabase_client
+from utils.tracking import log_once_per_page
 
 def run_receipt_scanner():
     # ---------------------------------
     # 1. Track page visit
     # ---------------------------------
-    log_page_visit("Receipt Scanner")
+    if "user_email" in st.session_state and st.session_state["user_email"]:
+    log_once_per_page("Receipt Scanner")
 
     st.title("📸 Receipt Scanner Agent")
     st.write("Upload a receipt image to get suggestions based on purchase history.")
