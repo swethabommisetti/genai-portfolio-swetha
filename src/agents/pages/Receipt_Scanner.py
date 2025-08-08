@@ -4,14 +4,18 @@ import re
 
 from utils.supabase_utils import get_supabase_client
 from utils.tracking import log_once_per_page
-
+from utils.email_utils import prompt_for_optional_email
 
 def run_receipt_scanner():
     # ---------------------------------
+    # 0. Optional email capture
+    # ---------------------------------
+    prompt_for_optional_email()
+
+    # ---------------------------------
     # 1. Track visit once per session
     # ---------------------------------
-    if "user_email" in st.session_state and st.session_state["user_email"]:
-        log_once_per_page("Receipt Scanner")
+    log_once_per_page("Receipt Scanner")
 
     st.title("📸 Receipt Scanner Agent")
     st.write("Upload a receipt image to get suggestions based on purchase history.")
@@ -27,7 +31,8 @@ def run_receipt_scanner():
     uploaded = st.file_uploader("Upload your receipt", type=["jpg", "jpeg", "png"])
 
     if uploaded:
-        st.image(uploaded, caption="🖼️ Preview: Uploaded Receipt", use_column_width=True)
+        file_bytes = uploaded.getvalue()
+        st.image(file_bytes, caption="🖼️ Preview: Uploaded Receipt", use_column_width=True)
 
         # ---------------------------------
         # 4. Generate safe filename
@@ -48,7 +53,6 @@ def run_receipt_scanner():
         # ---------------------------------
         # 5. Upload to Supabase bucket
         # ---------------------------------
-        file_bytes = uploaded.read()
         upload_res = supabase.storage.from_(bucket_name).upload(
             path=filename,
             file=file_bytes,
@@ -58,7 +62,9 @@ def run_receipt_scanner():
             }
         )
 
-        if isinstance(upload_res, dict) and upload_res.get("error") is None:
+
+        if upload_res.error is None:
+
             st.success("✅ File uploaded to Supabase!")
 
             # ---------------------------------
@@ -78,12 +84,24 @@ def run_receipt_scanner():
             # ---------------------------------
             # 7. Display signed URL
             # ---------------------------------
-            signed_url = supabase.storage.from_(bucket_name).create_signed_url(
+            signed_res = supabase.storage.from_(bucket_name).create_signed_url(
                 path=filename,
                 expires_in=600  # 10 minutes
             )
 
+            if signed_res.error is None and signed_res.data:
+                st.image(
+                    signed_res.data.get("signedURL"),
+                    caption="🔐 Secure Preview (valid for 10 min)",
+                    use_column_width=True,
+                )
+            else:
+                err = getattr(signed_res.error, "message", "Unknown error")
+                st.error(f"❌ Could not generate signed URL: {err}")
+
+
             st.image(signed_url, caption="🔐 Secure Preview (valid for 10 min)", use_column_width=True)
         else:
-            error_msg = upload_res.get("error", {}).get("message", "Unknown error")
+            error_msg = getattr(upload_res.error, "message", "Unknown error")
+
             st.error(f"❌ Upload failed: {error_msg}")
