@@ -62,19 +62,24 @@ def run_receipt_scanner():
             }
         )
 
+
         if upload_res.error is None:
+
             st.success("✅ File uploaded to Supabase!")
 
             # ---------------------------------
-            # 6. Insert metadata into table
+            # 6. Insert metadata into table (with debug)
             # ---------------------------------
-            supabase.table("receipt_files").insert({
-                "filename": filename,
-                "original_filename": original_filename_raw,
-                "bucket_name": bucket_name,
-                "mime_type": mime_type,
-                "visitor_id": visitor_id
-            }).execute()
+            try:
+                supabase.table("receipt_files").insert({
+                    "filename": filename,
+                    "original_filename": original_filename_raw,
+                    "bucket_name": bucket_name,
+                    "mime_type": mime_type,
+                    "visitor_id": visitor_id
+                }).execute()
+            except Exception as e:
+                st.warning(f"⚠️ Could not save receipt metadata: {e}")
 
             # ---------------------------------
             # 7. Display signed URL
@@ -83,6 +88,7 @@ def run_receipt_scanner():
                 path=filename,
                 expires_in=600  # 10 minutes
             )
+
             if signed_res.error is None and signed_res.data:
                 st.image(
                     signed_res.data.get("signedURL"),
@@ -93,6 +99,9 @@ def run_receipt_scanner():
                 err = getattr(signed_res.error, "message", "Unknown error")
                 st.error(f"❌ Could not generate signed URL: {err}")
 
+
+            st.image(signed_url, caption="🔐 Secure Preview (valid for 10 min)", use_column_width=True)
         else:
             error_msg = getattr(upload_res.error, "message", "Unknown error")
+
             st.error(f"❌ Upload failed: {error_msg}")
