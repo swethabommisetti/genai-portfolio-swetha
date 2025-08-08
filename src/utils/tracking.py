@@ -40,6 +40,7 @@ def log_page_visit(page_name, extra_fields=None):
         "ip_address": ip,
         "user_agent": user_agent,
         "insrt_user_id":session_id,
+        "visitor_id": st.session_state.get("visitor_id"),  
         "visitor_email": st.session_state.get("user_email", None), 
     }
     if extra_fields:
