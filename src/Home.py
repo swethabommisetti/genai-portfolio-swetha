@@ -2,12 +2,13 @@ import streamlit as st
 from utils.tracking import log_page_visit
 from utils.email_utils import prompt_for_optional_email
 
-prompt_for_optional_email()
+email = prompt_for_optional_email()  # Modify to return the email (see below)
 
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
-# Track home page visit
-log_page_visit("Home Page")
+# Only log after user has interacted with the email box (including leaving it blank)
+if "user_email" in st.session_state:
+    log_page_visit("Home Page")
 
 st.title("Welcome to Swetha's GenAI Portfolio 👋")
 
@@ -18,6 +19,4 @@ Use the sidebar to access the available GenAI agents.
 
 - 📸 **Receipt Scanner** — See what you've already purchased  
 - 📚 **Book Recommender** — Find books for your kids based on themes  
-
 """)
-
