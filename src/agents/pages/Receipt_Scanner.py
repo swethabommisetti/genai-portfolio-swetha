@@ -63,7 +63,7 @@ def run_receipt_scanner():
         )
 
 
-        if upload_res.error is None:
+        if not hasattr(upload_res, error):
 
             st.success("✅ File uploaded to Supabase!")
 
