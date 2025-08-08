@@ -10,12 +10,12 @@ def run_receipt_scanner():
     # ---------------------------------
     # 0. Optional email capture
     # ---------------------------------
-    prompt_for_optional_email()
+    #prompt_for_optional_email()
 
     # ---------------------------------
     # 1. Track visit once per session
     # ---------------------------------
-    log_once_per_page("Receipt Scanner")
+    #log_once_per_page("Receipt Scanner")
 
     st.title("📸 Receipt Scanner Agent")
     st.write("Upload a receipt image to get suggestions based on purchase history.")

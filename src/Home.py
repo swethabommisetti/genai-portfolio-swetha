@@ -7,13 +7,6 @@ from utils.tracking import log_once_per_page
 
 st.set_page_config(page_title="Swetha's GenAI Portfolio", layout="centered")
 
-# Optional email capture
-email = prompt_for_optional_email()
-
-# Log visit once user has interacted with the email box
-if "user_email" in st.session_state and st.session_state["user_email"]:
-    log_once_per_page("Home Page")
-
 # Sidebar menu
 page = st.sidebar.selectbox(
     "Choose a demo",
@@ -27,6 +20,13 @@ elif page == "Book Recommender":
     st.title("🚧 Coming Soon: Book Recommender Agent")
 
 else:
+    # Optional email capture for the Home page
+    prompt_for_optional_email()
+
+    # Log visit once user has provided an email
+    if "user_email" in st.session_state and st.session_state["user_email"]:
+        log_once_per_page("Home Page")
+
     st.title("Welcome to Swetha's GenAI Portfolio 👋")
     st.markdown(
         """
