@@ -47,10 +47,10 @@ if uploaded:
     # 5. Upload to Supabase Storage
     # ---------------------------------
     file_bytes = uploaded.read()
-        upload_res = supabase.storage.from_(bucket_name).upload(
-        path=filename,
-        file=file_bytes,
-        file_options={
+    upload_res = supabase.storage.from_(bucket_name).upload(
+    path=filename,
+    file=file_bytes,
+    file_options={
             "content-type": mime_type,
             "x-upsert": "false"  # prevent overwriting
         }
