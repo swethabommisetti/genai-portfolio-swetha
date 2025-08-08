@@ -1,6 +1,6 @@
 import streamlit as st
 import re
-from ..agents.pages.visitor_service import fetch_or_insert_visitor_id
+from utils.visitor_service import fetch_or_insert_visitor_id
 
 def is_valid_email(email):
     return re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", email)
