@@ -8,3 +8,5 @@ streamlit_analytics2
 requests              # To call the MiniGPT API
 jupyterlab
 supabase
+mistralai
+langgraph

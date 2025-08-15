@@ -2,6 +2,10 @@
 __pycache__/
 /src/utils/__pycache__/
 /.streamlit/secrets.toml
+__pycache__/
+*.py[cod]
+*$py.class
+
 *.py[cod]
 *$py.class
 
@@ -10,6 +14,7 @@ __pycache__/
 env/
 ENV/
 venv/
+myenv/
 genai-swetha/
 
 
