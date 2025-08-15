@@ -10,6 +10,6 @@ langgraph>=0.2.3
 pydantic<3
 
 # LLM providers
-langchain-groq>=0.1.4   # <-- provides `langchain_groq` import
+langchain-groq>=0.1.4
 groq>=0.5.0
 mistralai>=1.0.0

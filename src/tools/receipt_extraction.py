@@ -13,7 +13,11 @@ from tools.receipt_schema import ReceiptData
 load_dotenv()
 
 # Load your Mistral API key (from environment variable or .env file)
-api_key = os.getenv("MISTRAL_API_KEY")
+#api_key = os.getenv("MISTRAL_API_KEY")
+from utils.supabase_utils import get_mistral_api_key
+api_key = get_mistral_api_key()     # raises with a helpful message if missing
+os.environ.setdefault("MISTRAL_API_KEY", api_key)  # for SDKs that auto-read env
+
 if not api_key:
     raise ValueError("MISTRAL_API_KEY not found in environment variables.")
 

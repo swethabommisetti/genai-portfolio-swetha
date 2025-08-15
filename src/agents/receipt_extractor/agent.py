@@ -3,11 +3,17 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-
+from utils.supabase_utils import get_groq_api_key
 #from src.tools.receipt_extraction import ProcessReceiptTool
 #from src.tools.receipt_extraction import ProcessReceiptTool
 
 from tools.receipt_extraction import ProcessReceiptTool
+groq_key = get_groq_api_key()  # raises with a clear message if missing
+llm = ChatGroq(
+    api_key=groq_key,               # <-- pass explicitly, don’t rely only on env
+    model="llama-3.1-8b-instant",
+    temperature=0.0,
+)
 
 load_dotenv()
 # Initialize Groq LLM
