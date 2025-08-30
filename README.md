@@ -1,14 +1,42 @@
-# 🧠 GenAI Portfolio - Swetha
+# 🧠 GenAI Portfolio – Swetha
 
-This project demonstrates a fully Dockerized, production-ready GenAI agent environment with multi-environment support (`dev`, `qa`, `prod`). Designed to showcase agentic AI apps and streamline the interview/demo experience.
+This project demonstrates a **production-ready, Dockerized GenAI agent environment** with **multi-environment support (dev/qa/prod)**.
+It showcases **LLM-powered agents** (Receipt Scanner, Book Recommender) with **end-to-end architecture**: frontend (Streamlit), orchestration (LangChain/LangGraph), and backend integration (Supabase, Doppler, LangSmith).
+
+---
 
 ## 🚀 Features
 
-- ✅ Agent-based AI app architecture (LangChain, OCR, Streamlit)
-- ✅ Docker-based development and isolation
-- ✅ Environment-specific configuration via `.env` and build args
-- ✅ Secure login-protected Streamlit interface (for recruiters)
-- ✅ Easy iPhone/mobile testing over home network
+* ✅ **Agent-based AI apps** (LangChain, OCR, Streamlit UI)
+* ✅ **Multi-LLM backends**: Groq (speed), Mistral (open-source), OpenAI-ready (accuracy)
+* ✅ **Docker-first workflow** – dev, qa, prod isolation
+* ✅ **Environment configs** via `.env` + build args
+* ✅ **Supabase integration** – Postgres, auth, storage
+* ✅ **Secrets management** – Doppler + `.streamlit/secrets.toml`
+* ✅ **CI/CD ready** – GitHub Actions + Streamlit Cloud deploy
+* ✅ **Secure login (optional)** for recruiter demos
+* ✅ **iPhone/mobile testing** on local WiFi
+* ✅ **Observability** – LangSmith run traces & evaluation
+
+---
+
+## 🏗️ Architecture
+
+  1. Receipt Scanner
+     
+<img width="1024" height="1536" alt="ChatGPT Image Aug 29, 2025, 11_22_25 PM" src="https://github.com/user-attachments/assets/2ea56fe7-3d22-4782-9a3e-95c758010aa4" />
+
+
+**Flow**
+
+1. Streamlit UI (`Home.py`, modular `pages/`)
+2. Secrets via Doppler → Streamlit Cloud → Env
+3. Agents orchestrated with LangChain/LangGraph
+4. LLM inference via Groq/Mistral/OpenAI
+5. Data stored in Supabase (visitors, receipts, logs)
+6. Optional LangSmith for tracing/evaluation
+
+---
 
 ## 📦 Repo Structure
 
@@ -22,47 +50,63 @@ genai-portfolio-swetha/
 │   ├── qa/.env
 │   └── prod/.env
 ├── src/
-│   └── agents/
-│       ├── helloworld.py
-│       └── pages/
+│   ├── Home.py
+│   ├── agents/
+│   │   ├── pages/
+│   │   └── receipt_extractor/
+│   └── utils/
 ├── docs/
-│   └── SETUP_NOTES.md
-├── .github/
-│   └── workflows/ (CI/CD for formatting or future deploys)
-├── README.md
+│   └── architecture.png
+└── .github/
+    └── workflows/
 ```
 
-## 🧪 Local Dev (iPhone Testing on Same WiFi)
+---
+
+## 🧪 Local Dev (iPhone Testing)
 
 ```bash
 docker build -t genai-portfolio-swetha:dev --build-arg ENV=dev .
 docker run -p 8501:8501 --env-file=./environments/dev/.env genai-portfolio-swetha:dev
 ```
 
-Then access the app at:
-- Desktop: http://localhost:8501
-- iPhone (same WiFi): http://192.168.x.x:8501
+* Desktop: [http://localhost:8501](http://localhost:8501)
+* iPhone (same WiFi): `http://192.168.x.x:8501`
 
-## 🌐 Public Demo for Recruiters
+---
 
-Once ready, the prod branch can be deployed to **Streamlit Cloud** and shared as a link (with temporary login):
+## 🌐 Public Demo (Recruiters)
 
-```
-https://swetha-genai.streamlit.app
-```
+Deployed on **Streamlit Cloud**:
+👉 [https://genai-portfolio-swetha.streamlit.app](https://genai-portfolio-swetha.streamlit.app)
 
-> 💬 Recruiters can reach out for access credentials.
+(Private login available on request.)
 
 ---
 
 ## 🧱 Goals
 
-- Build real-world GenAI apps with full control
-- Showcase AI agents like **Receipt Scanner** and **Book Recommender**
-- Learn & demonstrate container-based AI workflows
+* Build **real-world GenAI apps** with container-first architecture
+* Showcase **modular, production-style AI agents**
+* Demonstrate **cloud-native workflows** (Supabase + Doppler + Streamlit)
+* Learn & apply **multi-agent orchestration + observability**
+
+---
+
+## 💡 Skills Highlighted
+
+* LLM orchestration (LangChain + LangGraph)
+* Multi-LLM strategy (Groq, Mistral, OpenAI)
+* Database integration (Supabase)
+* Secrets management (Doppler, TOML)
+* Containerization (Docker multi-env)
+* CI/CD with GitHub Actions + Streamlit Cloud
+* Evaluation & tracing (LangSmith)
+* Recruiter-ready UI/UX with modular Streamlit pages
 
 ---
 
 ## 📧 Contact
-Best Method in Resume. Change 2
+
+📬 Best method: listed in Resume / LinkedIn.
 
