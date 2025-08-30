@@ -47,8 +47,10 @@ Thumbs.db
 !environments/qa/.env
 !environments/prod/.env
 
-daytoday.txt
-Dockerfile_old.txt
+/daytoday.txt
+/Dockerfile_old.txt
 src/receipt_extractor/agent_swetha.py
+
+
 
 data/
