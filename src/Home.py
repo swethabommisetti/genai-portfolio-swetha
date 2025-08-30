@@ -54,12 +54,7 @@ def doppler_bootstrap():
 
 doppler_bootstrap()
 
-st.sidebar.write("Resolved env:", {
-    "SUPABASE_URL": bool(os.getenv("SUPABASE_URL")),
-    "SUPABASE_SERVICE_KEY": bool(os.getenv("SUPABASE_SERVICE_KEY")),
-    "MISTRAL_API_KEY": bool(os.getenv("MISTRAL_API_KEY")),
-    "GROQ_API_KEY": bool(os.getenv("GROQ_API_KEY")),
-})
+
 # Export LangSmith secrets to env so SDKs pick them up
 for key in ["LANGCHAIN_API_KEY", "LANGCHAIN_TRACING_V2", "LANGCHAIN_PROJECT"]:
     if key in st.secrets and not os.getenv(key):
