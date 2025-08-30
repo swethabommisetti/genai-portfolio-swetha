@@ -103,3 +103,38 @@ def ensure_llm_env() -> None:
         os.environ["MISTRAL_API_KEY"] = m
     if g and not os.getenv("GROQ_API_KEY"):
         os.environ["GROQ_API_KEY"] = g
+
+
+# --- Quick one-shot diagnostics you can call from anywhere -------------------
+def diagnose_supabase() -> None:
+    """
+    Prints to Streamlit and stdout: what URL/key is being used, where it came from,
+    and whether the hostname resolves. Safe to leave in code (no secrets printed).
+    """
+    import socket, urllib.parse
+    url = sget("SUPABASE_URL", "SUPABASE__URL")
+    key = sget("SUPABASE_SERVICE_KEY", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE__SUPABASE_SERVICE_KEY", "SUPABASE_KEY")
+    src_url = ("st.secrets" if ("SUPABASE_URL" in st.secrets or "SUPABASE__URL" in st.secrets) else "env")
+    src_key = ("st.secrets" if ("SUPABASE_SERVICE_KEY" in st.secrets or "SUPABASE_SERVICE_ROLE_KEY" in st.secrets
+                                 or "SUPABASE__SUPABASE_SERVICE_KEY" in st.secrets or "SUPABASE_KEY" in st.secrets)
+               else "env")
+
+    host = urllib.parse.urlparse(url or "").hostname if url else None
+    try:
+        ip = socket.gethostbyname(host) if host else None
+    except Exception as e:
+        ip = f"DNS ERROR: {e.__class__.__name__}: {e}"
+
+    msg = [
+        "🔎 Supabase diagnostics",
+        f"URL: {url!r} (from {src_url})",
+        f"HOST: {host!r}",
+        f"DNS: {ip}",
+        f"KEY prefix: {(key or '')[:8]!r} (from {src_key})",
+    ]
+    try:
+        import streamlit as st
+        st.sidebar.write("```\n" + "\n".join(msg) + "\n```")
+    except Exception:
+        pass
+    print("\n".join(msg))

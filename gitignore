@@ -16,6 +16,7 @@ ENV/
 venv/
 myenv/
 genai-swetha/
+.myenv/
 
 
 # dotenv environment files
@@ -48,3 +49,6 @@ Thumbs.db
 
 daytoday.txt
 Dockerfile_old.txt
+src/receipt_extractor/agent_swetha.py
+
+data/
