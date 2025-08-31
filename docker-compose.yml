@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  app:
+    image: genai-portfolio:dev
+    build:
+      context: .
+      args:
+        ENV: dev
+    command: streamlit run src/portfolio_homepage.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      ENV_MODE: dev
+      PYTHONUNBUFFERED: "1"
+      STREAMLIT_SERVER_HEADLESS: "true"
+      PYTHONPATH: /app/src
+    volumes:
+      - ./src:/app/src            # 🔁 live-reload your code
+      - ./environments/dev:/app/environments
+      - ./requirements.txt:/app/requirements.txt:ro
+      - ./data:/app/data          # if you have local assets
+      - ./.streamlit:/root/.streamlit  # optional: secrets/config

@@ -1,0 +1,26 @@
+name: Deploy Streamlit App with Doppler Secrets
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Doppler CLI
+        run: |
+          curl -Ls https://cli.doppler.com/install.sh | sh
+
+      - name: Download secrets from Doppler
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          ./doppler secrets download --no-file --format toml > .streamlit/secrets.toml
+
+      - name: Deploy to Streamlit Community Cloud
+        # Replace this with your actual Streamlit Cloud deploy step if needed
+        run: echo "Deploy step here (Streamlit Cloud auto-deploys on push)"

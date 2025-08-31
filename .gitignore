@@ -1,0 +1,48 @@
+# --- Local env / secrets ---
+.env
+*.env
+.streamlit/secrets.toml
+
+# --- IDEs / OS junk ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Virtual envs ---
+.venv/
+venv/
+ENV/
+env/
+myenv/
+genai-swetha/
+.myenv/
+
+# --- Compiled Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Docker logs / misc ---
+*.log
+*.pid
+*.gz
+*.swp
+
+# --- Large or local data ---
+data/
+
+# --- Explicit one-off files ---
+Dockerfile_old.txt
+daytoday.txt
+
+# --- Project-specific ---
+src/agents/receipt_extractor/agent_swetha.py
+
+# Allow specific env files for CI if needed
+!environments/dev/.env
+!environments/qa/.env
+!environments/prod/.env

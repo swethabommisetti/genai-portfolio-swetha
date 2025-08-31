@@ -1,0 +1,10 @@
+
+# Virtual envs
+.venv/
+env/
+ENV/
+venv/
+myenv/
+genai-swetha/
+myenv
+myenv/

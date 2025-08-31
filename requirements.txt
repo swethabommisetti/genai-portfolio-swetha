@@ -1,0 +1,15 @@
+streamlit>=1.38
+python-dotenv>=1.0
+requests>=2.31
+supabase>=2.5
+
+# LangChain stack
+langchain>=0.2,<0.3
+langchain-core>=0.2,<0.3
+langgraph>=0.2.3
+pydantic<3
+
+# LLM providers
+langchain-groq>=0.1.4
+groq>=0.5.0
+mistralai>=1.0.0
