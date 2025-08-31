@@ -158,5 +158,44 @@ Tip: keep `requirements.txt` lean and pin any LLM/LC packages to avoid surprise 
         unsafe_allow_html=True,
     )
 
+    # ---------- section 4: local & public ----------
+st.header("5. What Each Menu Item Does")
+st.markdown(
+    """
+
+## App Guide — What each menu item does
+
+### ReceiptScanner
+- **ReceiptScanner**  
+  Upload an image (JPG/PNG). We store it in Supabase Object Storage and insert a row into `receipt_files`.
+- **Execute**  
+  Runs the LangGraph extraction pipeline (OCR → normalize → structure). Writes header + line items to `receipts_dtl`.
+- **Documentation**  
+  The page you’re reading. Architecture, tech choices, and workflow.
+- **Analytics**  
+  Simple observability on volumes, runs, and basic quality counters.
+
+### ReceiptScanner-Evaluator
+- **Evaluator — Gold Dataset Creation**  
+  Pick a receipt → confirm store/total/date → save a gold record (SCD-II style) in `receipts_gold`.
+- **Evaluator — Error Tagging**  
+  Tag systematic model errors (e.g., “date parsing”, “wrong currency”). Stores tags for later analysis.
+- **Evaluator — Header Accuracy**  
+  Compare model predictions vs current gold across store/total/date. Shows PASS/FAIL per field and overall.
+- **Evaluator — Images Accuracy — Altered Images**  
+  Robustness testing. Compares **baseline** vs **perturbed** images (e.g., rotate) against gold. Flags regressions.
+- **Evaluator — Latency**  
+  Measures p50/p95 latency and errors for the extraction pipeline across a sample.
+
+### ReceiptScanner-Utils
+- **Gold Dataset Ingest**  
+  Pulls public receipt datasets (SROIE, ExpressExpense, etc.) into Supabase (each in its own table & storage path).
+- **Altered Images Creation**  
+  Generate perturbed images from public/personal receipts (rotate, brightness, etc.), saved to `pertubed_images/`.
+
+### BookRecommender (demo app #2)
+- Mirrors the pattern (Execute, Docs, Analytics) to show you can ship a second small AI app in the same repo.
+"""
+)
 st.divider()
 st.caption("Last updated · this page is auto-rendered by Streamlit; all links open in a new tab.")

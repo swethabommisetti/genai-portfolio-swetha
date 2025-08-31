@@ -80,14 +80,24 @@ receiptscanner_documentation = st.Page("pages/12_receiptscanner_documentation.py
 receiptscanner_analytics = st.Page("pages/13_receiptscanner_analytics.py", title="Analytics", icon="📊")
 # Evaluator (ReceiptScanner) pages
 receiptscanner_evaluator_home=st.Page("pages/14_evaluator_home.py",title="Evaluator")
-receiptscanner_evaluator_manual = st.Page("pages/15_evaluator_manual_scoring.py", title="Evaluator – Manual Scoring", icon="📝")
+receiptscanner_evaluator_manual = st.Page("pages/15_evaluator_manual_scoring.py", title="Evaluator – Gold Dataset Creation", icon="📝")
 receiptscanner_evaluator_errors = st.Page("pages/16_evaluator_error_tagging.py", title="Evaluator – Error Tagging", icon="🏷️")
+receiptscanner_evaluator_header_accuracy=st.Page("pages/18_evaluator_header_accuracy.py",title="Evaluator - Header Accuracy", icon="🧮")
+receiptscanner_evaluator_altered_images_accuracy=st.Page("pages/20_evaluator_altered_images.py",title="Evaluator - Images Accuracy-Altered Images", icon="🧪️")
+receiptscanner_evaluator_latency=st.Page("pages/21_evaluator_latency.py",title="Evaluator - Latency", icon="📝")
+receiptscanner_evaluator_consistency=st.Page("pages/21_evaluator_consistency.py",title="Evaluator - Consistency", icon="📝")
+
+# Utils (ReceiptScanner) pages
+receiptscanner_utils_home=st.Page("pages/17_utils_home.py",title="Gold Dataset Ingest")
+receiptscanner_utils_pertubed=st.Page("pages/19_utils_altered_images.py",title="Altered Images Creation")
+
+
 
 
 bookrecommender_agent = st.Page("bookrecommender_homepage.py", title="BookRecommender", icon="📚")
-bookrecommender_run = st.Page("pages/2_bookrecommender_run.py", title="Execute", icon="🚀")
-bookrecommender_documentation = st.Page("pages/22_bookrecommender_documentation.py", title="Documentation", icon="📑")
-bookrecommender_analytics = st.Page("pages/23_bookrecommender_analytics.py", title="Analytics", icon="📊")
+bookrecommender_run = st.Page("pages/3_bookrecommender_run.py", title="Execute", icon="🚀")
+bookrecommender_documentation = st.Page("pages/32_bookrecommender_documentation.py", title="Documentation", icon="📑")
+bookrecommender_analytics = st.Page("pages/33_bookrecommender_analytics.py", title="Analytics", icon="📊")
 
 nav = st.navigation(
     {
@@ -103,6 +113,15 @@ nav = st.navigation(
             receiptscanner_evaluator_home,
             receiptscanner_evaluator_manual,
             receiptscanner_evaluator_errors,
+            receiptscanner_evaluator_header_accuracy,
+            receiptscanner_evaluator_altered_images_accuracy,
+            receiptscanner_evaluator_latency,
+            receiptscanner_evaluator_consistency,
+        ],
+        "ReceiptScanner-Utils":[
+
+            receiptscanner_utils_home,
+            receiptscanner_utils_pertubed,
         ],
         "BookRecommender": [
             bookrecommender_agent,
