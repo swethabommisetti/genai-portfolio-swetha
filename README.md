@@ -1,11 +1,9 @@
-# 🧠 GenAI Portfolio – Swetha
+# GenAI Portfolio – Swetha
 
 This project demonstrates a **production-ready, Dockerized GenAI agent environment** with **multi-environment support (dev/qa/prod)**.
 It showcases **LLM-powered agents** (Receipt Scanner, Book Recommender) with **end-to-end architecture**: frontend (Streamlit), orchestration (LangChain/LangGraph), and backend integration (Supabase, Doppler, LangSmith).
 
----
-
-## 🚀 Features
+## Features
 
 * ✅ **Agent-based AI apps** (LangChain, OCR, Streamlit UI)
 * ✅ **Multi-LLM backends**: Groq (speed), Mistral (open-source), OpenAI-ready (accuracy)
@@ -18,15 +16,10 @@ It showcases **LLM-powered agents** (Receipt Scanner, Book Recommender) with **e
 * ✅ **iPhone/mobile testing** on local WiFi
 * ✅ **Observability** – LangSmith run traces & evaluation
 
----
-
-## 🏗️ Architecture
+##  Architecture
 
   1. Receipt Scanner
      
-<img width="1024" height="1536" alt="ChatGPT Image Aug 29, 2025, 11_22_25 PM" src="https://github.com/user-attachments/assets/2ea56fe7-3d22-4782-9a3e-95c758010aa4" />
-
-
 **Flow**
 
 1. Streamlit UI (`Home.py`, modular `pages/`)
@@ -36,9 +29,7 @@ It showcases **LLM-powered agents** (Receipt Scanner, Book Recommender) with **e
 5. Data stored in Supabase (visitors, receipts, logs)
 6. Optional LangSmith for tracing/evaluation
 
----
-
-## 📦 Repo Structure
+## Repo Structure
 
 ```
 genai-portfolio-swetha/
@@ -60,9 +51,6 @@ genai-portfolio-swetha/
 └── .github/
     └── workflows/
 ```
-
----
-
 ## 🧪 Local Dev (iPhone Testing)
 
 ```bash
@@ -73,8 +61,6 @@ docker run -p 8501:8501 --env-file=./environments/dev/.env genai-portfolio-sweth
 * Desktop: [http://localhost:8501](http://localhost:8501)
 * iPhone (same WiFi): `http://192.168.x.x:8501`
 
----
-
 ## 🌐 Public Demo (Recruiters)
 
 Deployed on **Streamlit Cloud**:
@@ -82,16 +68,12 @@ Deployed on **Streamlit Cloud**:
 
 (Private login available on request.)
 
----
-
 ## 🧱 Goals
 
 * Build **real-world GenAI apps** with container-first architecture
 * Showcase **modular, production-style AI agents**
 * Demonstrate **cloud-native workflows** (Supabase + Doppler + Streamlit)
 * Learn & apply **multi-agent orchestration + observability**
-
----
 
 ## 💡 Skills Highlighted
 
@@ -104,7 +86,6 @@ Deployed on **Streamlit Cloud**:
 * Evaluation & tracing (LangSmith)
 * Recruiter-ready UI/UX with modular Streamlit pages
 
----
 
 ## 📧 Contact
 

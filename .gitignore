@@ -46,3 +46,6 @@ src/agents/receipt_extractor/agent_swetha.py
 !environments/dev/.env
 !environments/qa/.env
 !environments/prod/.env
+
+mailmap.txt
+.Trash-0/
