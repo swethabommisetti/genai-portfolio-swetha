@@ -87,16 +87,11 @@ genai-portfolio-swetha/
 │       ├── tracking.py         → Logs and tracks app usage
 │       └── visitor_service.py  → Tracks visitor analytics
 │
-├── docs/                      → Project documentation
-│   └── architecture.png       → Architecture diagram
-│
 ├── Dockerfile                 → Docker setup for containerized deployment
 ├── docker-compose.yml         → Multi-service orchestration (if needed)
 ├── dockerignore               → Files ignored in Docker builds
 ├── README.md                  → Project introduction and instructions
 ├── requirements.txt           → Dependencies (for running the app)
-└── requirements.dev.txt       → Extra dependencies (for development)
-
 
 ```
 ## 🧪 Local Dev (iPhone Testing)
