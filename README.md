@@ -95,15 +95,13 @@ genai-portfolio-swetha/
 │       ├── tracking.py
 │       └── visitor_service.py
 │
-├── docs/
-│   └── architecture.png
 │
 ├── Dockerfile
 ├── docker-compose.yml
 ├── dockerignore
 ├── README.md
 ├── requirements.txt
-└── requirements.dev.txt
+
 
 ```
 ## 🧪 Local Dev (iPhone Testing)
