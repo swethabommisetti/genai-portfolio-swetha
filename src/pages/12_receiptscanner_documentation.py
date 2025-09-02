@@ -162,9 +162,6 @@ Tip: keep `requirements.txt` lean and pin any LLM/LC packages to avoid surprise 
 st.header("5. What Each Menu Item Does")
 st.markdown(
     """
-
-## App Guide — What each menu item does
-
 ### ReceiptScanner
 - **ReceiptScanner**  
   Upload an image (JPG/PNG). We store it in Supabase Object Storage and insert a row into `receipt_files`.
