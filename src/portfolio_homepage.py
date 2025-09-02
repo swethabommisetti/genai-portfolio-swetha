@@ -216,4 +216,5 @@ nav = st.navigation(
     },
     position="sidebar",
 )
+
 nav.run()
