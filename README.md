@@ -33,23 +33,78 @@ It showcases **LLM-powered agents** (Receipt Scanner, Book Recommender) with **e
 
 ```
 genai-portfolio-swetha/
-├── Dockerfile
-├── requirements.txt
-├── requirements.dev.txt
+│
+├── .streamlit/
+│   └── config.toml
+│
 ├── environments/
-│   ├── dev/.env
+│   ├── dev/.env.dev
 │   ├── qa/.env
 │   └── prod/.env
+│
 ├── src/
 │   ├── Home.py
+│   ├── bookrecommender_homepage.py
+│   ├── portfolio_homepage.py
+│   ├── receiptscanner_homepage.py
+│   │
 │   ├── agents/
-│   │   ├── pages/
+│   │   ├── analytics/
 │   │   └── receipt_extractor/
+│   │       └── agent.py
+│   │
+│   ├── pages/
+│   │   ├── 1_receiptscanner_run.py
+│   │   ├── 3_bookrecommender_run.py
+│   │   ├── 12_receiptscanner_documentation.py
+│   │   ├── 13_receiptscanner_analytics.py
+│   │   ├── 14_evaluator_home.py
+│   │   ├── 15_evaluator_manual_scoring.py
+│   │   ├── 16_evaluator_error_tagging.py
+│   │   ├── 17_utils_home.py
+│   │   ├── 18_evaluator_header_accuracy.py
+│   │   ├── 19_utils_altered_images.py
+│   │   ├── 20_evaluator_altered_images.py
+│   │   ├── 21_evaluator_consistency.py
+│   │   ├── 22_evaluator_latency.py
+│   │   ├── 32_bookrecommender_documentation.py
+│   │   └── 33_bookrecommender_analytics.py
+│   │
+│   ├── provisioning/
+│   │   ├── __init__.py
+│   │   ├── api.py
+│   │   ├── autostart_api.py
+│   │   ├── config.py
+│   │   ├── docs.py
+│   │   ├── menu.py
+│   │   ├── nav.py
+│   │   ├── theme.py
+│   │   └── ui.py
+│   │
+│   ├── tools/
+│   │   ├── __init__.py
+│   │   ├── receipt_extraction.py
+│   │   └── receipt_schema.py
+│   │
 │   └── utils/
+│       ├── __init__.py
+│       ├── email_utils.py
+│       ├── evals_repo.py
+│       ├── receipts_repo.py
+│       ├── supabase_utils.py
+│       ├── tracking.py
+│       └── visitor_service.py
+│
 ├── docs/
 │   └── architecture.png
-└── .github/
-    └── workflows/
+│
+├── Dockerfile
+├── docker-compose.yml
+├── dockerignore
+├── README.md
+├── requirements.txt
+└── requirements.dev.txt
+
 ```
 ## 🧪 Local Dev (iPhone Testing)
 
