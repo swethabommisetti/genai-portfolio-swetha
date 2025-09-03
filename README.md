@@ -38,7 +38,6 @@ genai-portfolio-swetha/
 │   └── config.toml
 │
 ├── src/                                     → Main application code
-│   ├── Home.py                              → Landing page of the portfolio app
 │   ├── bookrecommender_homepage.py          → Entry page for the Book Recommender
 │   ├── portfolio_homepage.py                → Portfolio overview page
 │   ├── receiptscanner_homepage.py           → Entry page for the Receipt Scanner
