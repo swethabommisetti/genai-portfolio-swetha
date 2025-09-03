@@ -7,7 +7,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, date
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -18,15 +18,14 @@ st.title("🎯 Evaluator — Prompt Accuracy (Headers)")
 st.caption("Evaluates header fields between **Model (receipts_dtl)** and **Gold (receipts_gold)**.")
 
 # ---------------- Tunables ----------------
-TOTAL_TOLERANCE = 5.0  # pass if |pred - gold| <= 5 cents
+TOTAL_TOLERANCE = 5.00  # pass if |pred - gold| <= $0.05
 DROPDOWN_LIMIT = 600    # how many latest gold rows to offer in the dropdown
 SIGNED_URL_TTL = 900    # seconds (15 min)
 # ------------------------------------------
 
-
-# ---------------- Supabase helpers ----------------
 supabase = get_supabase_client()
 
+# ---------------- Supabase helpers ----------------
 @st.cache_data(ttl=90)
 def _fetch_current_gold(limit: int = DROPDOWN_LIMIT) -> pd.DataFrame:
     """
@@ -49,6 +48,11 @@ def _fetch_current_gold(limit: int = DROPDOWN_LIMIT) -> pd.DataFrame:
 
     # Join to receipts_dtl for predictions + file linkage
     receipt_ids = [r for r in gdf["receipt_id"].tolist() if r]
+    if not receipt_ids:
+        return gdf.assign(
+            receipt_file_id=None, store_name=None, total=None, purchase_datetime=None
+        )
+
     dtl = (
         supabase.table("receipts_dtl")
         .select("id,receipt_file_id,store_name,total,purchase_datetime")
@@ -62,10 +66,8 @@ def _fetch_current_gold(limit: int = DROPDOWN_LIMIT) -> pd.DataFrame:
     merged = gdf.merge(ddf, on="receipt_id", how="left")
     return merged
 
-
 @st.cache_data(ttl=300)
 def _file_row(receipt_file_id: str) -> Optional[Dict]:
-    """Fetch filename + bucket for a given receipt_file_id."""
     try:
         res = (
             supabase.table("receipt_files")
@@ -80,9 +82,7 @@ def _file_row(receipt_file_id: str) -> Optional[Dict]:
         pass
     return None
 
-
 def _signed_url(receipt_file_id: Optional[str]) -> Optional[str]:
-    """Create a signed URL for the receipt image (if we have file and bucket)."""
     if not receipt_file_id:
         return None
     row = _file_row(receipt_file_id)
@@ -104,7 +104,6 @@ def _signed_url(receipt_file_id: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-
 # ---------------- Eval logic ----------------
 def _norm_date_only(x) -> Optional[str]:
     """Return YYYY-MM-DD for comparisons."""
@@ -113,15 +112,10 @@ def _norm_date_only(x) -> Optional[str]:
     if isinstance(x, date):
         return x.isoformat()
     s = str(x).strip()
-    # try ISO string first
     try:
-        # support timestamptz strings like '2025-09-02T13:45:00+00:00'
         return datetime.fromisoformat(s.replace("Z", "")).date().isoformat()
     except Exception:
-        pass
-    # fallback: just take first 10 chars if it looks like YYYY-MM-DD...
-    return s[:10] if len(s) >= 10 else s
-
+        return s[:10] if len(s) >= 10 else s
 
 @dataclass
 class EvalRow:
@@ -139,7 +133,6 @@ class EvalRow:
     date_pass: Optional[bool]
     overall_pass: Optional[bool]
 
-
 def _to_float(x) -> Optional[float]:
     if x is None or x == "":
         return None
@@ -148,12 +141,11 @@ def _to_float(x) -> Optional[float]:
     except Exception:
         return None
 
-
 def evaluate_rows(df: pd.DataFrame, only_receipt_id: Optional[str] = None) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
-    if only_receipt_id:
+    if only_receipt_id is not None:
         df = df[df["receipt_id"] == only_receipt_id]
 
     rows: List[EvalRow] = []
@@ -171,7 +163,7 @@ def evaluate_rows(df: pd.DataFrame, only_receipt_id: Optional[str] = None) -> pd
         pred_total = _to_float(r.get("total"))
         pred_date = _norm_date_only(r.get("purchase_datetime"))
 
-        # store pass (case-insensitive, trimmed)
+        # store pass
         store_pass = None
         if (gold_store or pred_store):
             store_pass = ( (str(gold_store or "").strip().casefold()) ==
@@ -212,9 +204,45 @@ def evaluate_rows(df: pd.DataFrame, only_receipt_id: Optional[str] = None) -> pd
             )
         )
 
-    out = pd.DataFrame([r.__dict__ for r in rows])
-    return out
+    return pd.DataFrame([r.__dict__ for r in rows])
 
+def _pct(col: str, df: pd.DataFrame) -> Optional[float]:
+    s = df[col].dropna()
+    return round(float(s.mean() * 100.0), 1) if len(s) else None
+
+def _nan_to_none(v):
+    return None if pd.isna(v) else v
+
+def _write_results_to_db(results_df: pd.DataFrame, scope: str):
+    if results_df.empty:
+        return 0
+
+    def _nan_to_none(v):
+        return None if pd.isna(v) else v
+
+    payload = []
+    for _, r in results_df.iterrows():
+        payload.append({
+            "source_kind":      "personal",                   # ← NEW: required by your table
+            "receipt_id":       _nan_to_none(r.get("receipt_id")),
+            "receipt_file_id":  _nan_to_none(r.get("receipt_file_id")),
+            "gold_store":       _nan_to_none(r.get("gold_store")),
+            "pred_store":       _nan_to_none(r.get("pred_store")),
+            "store_pass":       _nan_to_none(r.get("store_pass")),
+            "gold_total":       _nan_to_none(r.get("gold_total")),
+            "pred_total":       _nan_to_none(r.get("pred_total")),
+            "total_delta":      _nan_to_none(r.get("total_delta")),
+            "total_pass":       _nan_to_none(r.get("total_pass")),
+            "gold_date":        _nan_to_none(r.get("gold_date")),
+            "pred_date":        _nan_to_none(r.get("pred_date")),
+            "date_pass":        _nan_to_none(r.get("date_pass")),
+            "overall_pass":     _nan_to_none(r.get("overall_pass")),
+            "eval_scope":       scope,
+            "total_tolerance":  TOTAL_TOLERANCE,
+        })
+
+    supabase.table("receipts_header_eval_results").insert(payload).execute()
+    return len(payload)
 
 # ---------------- UI: top controls ----------------
 gold_df = _fetch_current_gold(DROPDOWN_LIMIT)
@@ -226,7 +254,6 @@ if gold_df.empty:
     st.info("No current gold rows found. Create gold labels first on your ‘Gold Dataset’ page.")
     st.stop()
 
-# Build nice dropdown labels
 def _label_for_row(r) -> str:
     note = r.get("store_name_gold") or "—"
     d = r.get("purchase_date_gold")
@@ -250,14 +277,25 @@ selected_receipt_id = idx_map[selection]
 
 run = st.button("Run", type="primary")
 
-# remember last selection
+# remember last selection (allow None => evaluate ALL)
 if "hdr_eval_last" not in st.session_state:
     st.session_state.hdr_eval_last = None
 if run:
     st.session_state.hdr_eval_last = selected_receipt_id
 
+if "hdr_eval_last" not in st.session_state:
+    st.stop()
+
 active_receipt_id = st.session_state.hdr_eval_last
+if "hdr_eval_ran" not in st.session_state:
+    st.session_state.hdr_eval_ran = False
+
 if active_receipt_id is None:
+    scope_txt = "all"
+else:
+    scope_txt = "single"
+
+if not run and not st.session_state.hdr_eval_ran:
     st.info("Choose a receipt (or leave **All receipts**) and click **Run**.")
     st.stop()
 
@@ -265,19 +303,24 @@ if active_receipt_id is None:
 with st.spinner("Running header accuracy evaluation…"):
     results_df = evaluate_rows(gold_df, only_receipt_id=active_receipt_id)
 
+st.session_state.hdr_eval_ran = True
+
 if results_df.empty:
     st.info("No rows to evaluate for this selection.")
     st.stop()
 
-# KPIs
-def _pct(col: str) -> Optional[float]:
-    s = results_df[col].dropna()
-    return round(float(s.mean() * 100.0), 1) if len(s) else None
+# Write results to DB
+try:
+    inserted = _write_results_to_db(results_df, scope=scope_txt)
+    st.success(f"Saved {inserted} row(s) to `public.receipts_header_eval_results`.")
+except Exception as e:
+    st.error(f"DB insert failed: {e}")
 
-k_store = _pct("store_pass")
-k_total = _pct("total_pass")
-k_date  = _pct("date_pass")
-k_over  = _pct("overall_pass")
+# KPIs
+k_store = _pct("store_pass", results_df)
+k_total = _pct("total_pass", results_df)
+k_date  = _pct("date_pass",  results_df)
+k_over  = _pct("overall_pass", results_df)
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Store match", f"{k_store:.1f}%" if k_store is not None else "—")
