@@ -1,224 +1,332 @@
-# src/pages/18_Evaluator — Prompt Accuracy.py
-import math
-from datetime import datetime, date
-from typing import List, Dict, Any, Optional
+# src/pages/18_evaluator_header_accuracy.py
+# Evaluator — Prompt Accuracy (Headers) for your schema:
+#   Gold: receipts_gold (current rows: curr_rec_ind = true)
+#   Pred: receipts_dtl (normalized extraction you store after upload)
+#   Files: receipt_files (to render image via signed URL)
 
-import streamlit as st
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import datetime, date
+from typing import Dict, List, Optional, Tuple
+
 import pandas as pd
+import streamlit as st
 from utils.supabase_utils import get_supabase_client
-import utils.evals_repo as evals  # reuse your helpers
 
 st.set_page_config(page_title="Evaluator — Prompt Accuracy (Headers)", layout="wide")
 st.title("🎯 Evaluator — Prompt Accuracy (Headers)")
-st.markdown(      """
-Evaluates Header between Model and Gold dataset Created
-        """)
+st.caption("Evaluates header fields between **Model (receipts_dtl)** and **Gold (receipts_gold)**.")
 
-TOLERANCE = 0.05  # $ cents tolerance for totals
+# ---------------- Tunables ----------------
+TOTAL_TOLERANCE = 5.0  # pass if |pred - gold| <= 5 cents
+DROPDOWN_LIMIT = 600    # how many latest gold rows to offer in the dropdown
+SIGNED_URL_TTL = 900    # seconds (15 min)
+# ------------------------------------------
 
+
+# ---------------- Supabase helpers ----------------
 supabase = get_supabase_client()
 
-@st.cache_data(ttl=60)
-def load_current_gold(limit:int=300) -> List[Dict[str, Any]]:
+@st.cache_data(ttl=90)
+def _fetch_current_gold(limit: int = DROPDOWN_LIMIT) -> pd.DataFrame:
     """
-    Pull the SCD-2 current gold rows and join to receipts_dtl for file linkage.
-    Returns list of dicts with: receipt_id, gold fields, and receipt_file_id.
+    Pull current rows from receipts_gold and join to receipts_dtl to get receipt_file_id
+    and the predicted header fields we want to compare.
     """
-    gold_rows = (
+    gold = (
         supabase.table("receipts_gold")
-        .select("receipt_id, store_name_gold, total_gold, purchase_date_gold")
+        .select("id,receipt_id,store_name_gold,total_gold,purchase_date_gold,rec_eff_start")
         .eq("curr_rec_ind", True)
         .order("rec_eff_start", desc=True)
         .limit(limit)
         .execute()
         .data or []
     )
-    if not gold_rows:
-        return []
+    if not gold:
+        return pd.DataFrame()
 
-    ids = [r["receipt_id"] for r in gold_rows if r.get("receipt_id")]
-    if not ids:
-        return []
+    gdf = pd.DataFrame(gold)
 
+    # Join to receipts_dtl for predictions + file linkage
+    receipt_ids = [r for r in gdf["receipt_id"].tolist() if r]
     dtl = (
         supabase.table("receipts_dtl")
-        .select("id, receipt_file_id")
-        .in_("id", ids)
+        .select("id,receipt_file_id,store_name,total,purchase_datetime")
+        .in_("id", receipt_ids)
         .execute()
         .data or []
     )
-    idx = {d["id"]: d for d in dtl}
-    out = []
-    for g in gold_rows:
-        rid = g["receipt_id"]
-        rf = idx.get(rid, {})
-        out.append({
-            "receipt_id": rid,
-            "receipt_file_id": rf.get("receipt_file_id"),
-            "store_name_gold": g.get("store_name_gold"),
-            "total_gold": g.get("total_gold"),
-            "purchase_date_gold": g.get("purchase_date_gold"),
-        })
-    return out
+    ddf = pd.DataFrame(dtl) if dtl else pd.DataFrame(columns=["id","receipt_file_id","store_name","total","purchase_datetime"])
+    ddf.rename(columns={"id": "receipt_id"}, inplace=True)
 
-def normalize_date_str(x) -> Optional[str]:
+    merged = gdf.merge(ddf, on="receipt_id", how="left")
+    return merged
+
+
+@st.cache_data(ttl=300)
+def _file_row(receipt_file_id: str) -> Optional[Dict]:
+    """Fetch filename + bucket for a given receipt_file_id."""
+    try:
+        res = (
+            supabase.table("receipt_files")
+            .select("filename,bucket_name")
+            .eq("id", receipt_file_id)
+            .limit(1)
+            .execute()
+        )
+        if getattr(res, "data", None):
+            return res.data[0]
+    except Exception:
+        pass
+    return None
+
+
+def _signed_url(receipt_file_id: Optional[str]) -> Optional[str]:
+    """Create a signed URL for the receipt image (if we have file and bucket)."""
+    if not receipt_file_id:
+        return None
+    row = _file_row(receipt_file_id)
+    if not row:
+        return None
+    path = row.get("filename")
+    bucket = row.get("bucket_name")
+    if not (path and bucket):
+        return None
+    try:
+        signed = supabase.storage.from_(bucket).create_signed_url(path=path, expires_in=SIGNED_URL_TTL)
+        if isinstance(signed, dict):
+            return signed.get("signedURL") or signed.get("signed_url") or signed.get("url")
+        return (
+            getattr(signed, "signedURL", None)
+            or getattr(signed, "signed_url", None)
+            or getattr(signed, "url", None)
+        )
+    except Exception:
+        return None
+
+
+# ---------------- Eval logic ----------------
+def _norm_date_only(x) -> Optional[str]:
+    """Return YYYY-MM-DD for comparisons."""
     if not x:
         return None
     if isinstance(x, date):
         return x.isoformat()
-    if isinstance(x, str):
-        try:
-            return datetime.fromisoformat(x.replace("Z","")).date().isoformat()
-        except Exception:
-            return x[:10] if len(x) >= 10 else x
-    return None
-
-def to_float_safe(v) -> Optional[float]:
+    s = str(x).strip()
+    # try ISO string first
     try:
-        if v is None or v == "":
-            return None
-        f = float(v)
-        return f if math.isfinite(f) else None
+        # support timestamptz strings like '2025-09-02T13:45:00+00:00'
+        return datetime.fromisoformat(s.replace("Z", "")).date().isoformat()
+    except Exception:
+        pass
+    # fallback: just take first 10 chars if it looks like YYYY-MM-DD...
+    return s[:10] if len(s) >= 10 else s
+
+
+@dataclass
+class EvalRow:
+    receipt_id: str
+    receipt_file_id: Optional[str]
+    gold_store: Optional[str]
+    pred_store: Optional[str]
+    store_pass: Optional[bool]
+    gold_total: Optional[float]
+    pred_total: Optional[float]
+    total_delta: Optional[float]
+    total_pass: Optional[bool]
+    gold_date: Optional[str]
+    pred_date: Optional[str]
+    date_pass: Optional[bool]
+    overall_pass: Optional[bool]
+
+
+def _to_float(x) -> Optional[float]:
+    if x is None or x == "":
+        return None
+    try:
+        return float(x)
     except Exception:
         return None
 
-def evaluate_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Given a row with gold + receipt ids, fetch model output and compute pass/fail per field.
-    """
-    rid = row.get("receipt_id")
-    rf_id = row.get("receipt_file_id")
-    if not (rid and rf_id):
-        return {**row, "eval_status": "missing_link"}
 
-    data = evals.get_extracted_values(receipt_file_id=rf_id, dtl_id=rid) or {}
-    hdr = data.get("header") or {}
-    totals = data.get("totals") or {}
+def evaluate_rows(df: pd.DataFrame, only_receipt_id: Optional[str] = None) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
 
-    # predictions
-    pred_store = (hdr.get("store_name") or "") or None
-    pred_total = to_float_safe(hdr.get("total"))
-    if pred_total is None:
-        pred_total = to_float_safe(totals.get("grand_total"))
-    pred_date_raw = hdr.get("purchase_datetime")
-    pred_date = normalize_date_str(pred_date_raw)
+    if only_receipt_id:
+        df = df[df["receipt_id"] == only_receipt_id]
 
-    # golds
-    gold_store = (row.get("store_name_gold") or "") or None
-    gold_total = to_float_safe(row.get("total_gold"))
-    gold_date = normalize_date_str(row.get("purchase_date_gold"))
+    rows: List[EvalRow] = []
+    for _, r in df.iterrows():
+        rid = r.get("receipt_id")
+        rfid = r.get("receipt_file_id")
 
-    # comparisons
-    store_pass = None
-    if gold_store or pred_store:
-        store_pass = ( (gold_store or "").strip().casefold() ==
-                       (pred_store or "").strip().casefold() )
+        # golds
+        gold_store = r.get("store_name_gold")
+        gold_total = _to_float(r.get("total_gold"))
+        gold_date = _norm_date_only(r.get("purchase_date_gold"))
 
-    total_pass = None
-    delta = None
-    if gold_total is not None and pred_total is not None:
-        delta = abs(pred_total - gold_total)
-        total_pass = (delta <= TOLERANCE)
+        # preds from receipts_dtl
+        pred_store = r.get("store_name")
+        pred_total = _to_float(r.get("total"))
+        pred_date = _norm_date_only(r.get("purchase_datetime"))
 
-    date_pass = None
-    if gold_date or pred_date:
-        date_pass = (gold_date == pred_date)
+        # store pass (case-insensitive, trimmed)
+        store_pass = None
+        if (gold_store or pred_store):
+            store_pass = ( (str(gold_store or "").strip().casefold()) ==
+                           (str(pred_store or "").strip().casefold()) )
 
-    overall = all([
-        x is True for x in (store_pass, total_pass, date_pass)
-    ]) if any(v is not None for v in (store_pass, total_pass, date_pass)) else None
+        # total pass / delta
+        total_pass = None
+        total_delta = None
+        if gold_total is not None and pred_total is not None:
+            total_delta = round(abs(pred_total - gold_total), 2)
+            total_pass = (total_delta <= TOTAL_TOLERANCE)
 
-    return {
-        "receipt_id": rid,
-        "receipt_file_id": rf_id,
-        "gold_store": gold_store,
-        "pred_store": pred_store,
-        "store_pass": store_pass,
-        "gold_total": gold_total,
-        "pred_total": pred_total,
-        "total_delta": delta,
-        "total_pass": total_pass,
-        "gold_date": gold_date,
-        "pred_date": pred_date,
-        "date_pass": date_pass,
-        "overall_pass": overall,
-    }
+        # date pass (date-only compare)
+        date_pass = None
+        if (gold_date or pred_date):
+            date_pass = (gold_date == pred_date)
 
-# ---------- UI ----------
-gold_rows = load_current_gold(limit=300)
-if not gold_rows:
-    st.info("No current gold rows found. Use the Manual Scoring page to create SCD-2 gold first.")
+        overall_pass = None
+        touched = [store_pass, total_pass, date_pass]
+        if any(v is not None for v in touched):
+            overall_pass = all(v is True for v in touched)
+
+        rows.append(
+            EvalRow(
+                receipt_id=str(rid),
+                receipt_file_id=rfid,
+                gold_store=gold_store,
+                pred_store=pred_store,
+                store_pass=store_pass,
+                gold_total=gold_total,
+                pred_total=pred_total,
+                total_delta=total_delta,
+                total_pass=total_pass,
+                gold_date=gold_date,
+                pred_date=pred_date,
+                date_pass=date_pass,
+                overall_pass=overall_pass,
+            )
+        )
+
+    out = pd.DataFrame([r.__dict__ for r in rows])
+    return out
+
+
+# ---------------- UI: top controls ----------------
+gold_df = _fetch_current_gold(DROPDOWN_LIMIT)
+
+with st.container(border=True):
+    st.write("✅ Evaluating against **current** gold (receipts_gold.curr_rec_ind = true).")
+
+if gold_df.empty:
+    st.info("No current gold rows found. Create gold labels first on your ‘Gold Dataset’ page.")
     st.stop()
 
-with st.status("Evaluating against current gold…", expanded=False):
-    results = [evaluate_row(r) for r in gold_rows]
+# Build nice dropdown labels
+def _label_for_row(r) -> str:
+    note = r.get("store_name_gold") or "—"
+    d = r.get("purchase_date_gold")
+    d_txt = _norm_date_only(d) or "—"
+    return f"{str(r.get('receipt_id'))[:8]}…  •  {note}  •  {d_txt}"
 
-df = pd.DataFrame(results)
+options = [(None, "All receipts")] + [
+    (str(r["receipt_id"]), _label_for_row(r)) for _, r in gold_df.iterrows()
+]
+
+idx_map = {i: rid for i, (rid, _) in enumerate(options)}
+label_map = {i: lbl for i, (_, lbl) in enumerate(options)}
+
+selection = st.selectbox(
+    "Pick a receipt",
+    options=list(idx_map.keys()),
+    format_func=lambda i: label_map[i],
+    index=0,
+)
+selected_receipt_id = idx_map[selection]
+
+run = st.button("Run", type="primary")
+
+# remember last selection
+if "hdr_eval_last" not in st.session_state:
+    st.session_state.hdr_eval_last = None
+if run:
+    st.session_state.hdr_eval_last = selected_receipt_id
+
+active_receipt_id = st.session_state.hdr_eval_last
+if active_receipt_id is None:
+    st.info("Choose a receipt (or leave **All receipts**) and click **Run**.")
+    st.stop()
+
+# ---------------- Execute evaluation ----------------
+with st.spinner("Running header accuracy evaluation…"):
+    results_df = evaluate_rows(gold_df, only_receipt_id=active_receipt_id)
+
+if results_df.empty:
+    st.info("No rows to evaluate for this selection.")
+    st.stop()
 
 # KPIs
-def rate(col):
-    s = df[col].dropna()
-    return (s.mean() * 100.0) if len(s) else None
+def _pct(col: str) -> Optional[float]:
+    s = results_df[col].dropna()
+    return round(float(s.mean() * 100.0), 1) if len(s) else None
 
-store_acc = rate("store_pass")
-total_acc = rate("total_pass")
-date_acc  = rate("date_pass")
-overall   = rate("overall_pass")
+k_store = _pct("store_pass")
+k_total = _pct("total_pass")
+k_date  = _pct("date_pass")
+k_over  = _pct("overall_pass")
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Store match", f"{store_acc:.1f}%" if store_acc is not None else "—")
-k2.metric("Total within ±$0.05", f"{total_acc:.1f}%" if total_acc is not None else "—")
-k3.metric("Date match", f"{date_acc:.1f}%" if date_acc is not None else "—")
-k4.metric("Overall (all 3)", f"{overall:.1f}%" if overall is not None else "—")
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Store match", f"{k_store:.1f}%" if k_store is not None else "—")
+c2.metric(f"Total within ±${TOTAL_TOLERANCE:.2f}", f"{k_total:.1f}%" if k_total is not None else "—")
+c3.metric("Date match", f"{k_date:.1f}%" if k_date is not None else "—")
+c4.metric("Overall (all 3)", f"{k_over:.1f}%" if k_over is not None else "—")
 
 st.divider()
 
-# ---- Failures table (compact) ----
-fails = df[(df["overall_pass"] == False) | df["overall_pass"].isna()].copy()
+# ---------------- Mismatches table ----------------
 st.subheader("❌ Mismatches / Needs review")
+fails = results_df[(results_df["overall_pass"] == False) | results_df["overall_pass"].isna()].copy()
 
-def _status(b):
-    return "PASS" if b is True else ("FAIL" if b is False else "—")
+def _status(v: Optional[bool]) -> str:
+    return "PASS" if v is True else ("FAIL" if v is False else "—")
 
 if fails.empty:
-    st.success("All evaluated receipts passed (for fields present).")
+    st.success("All evaluated rows passed (for the fields present).")
 else:
-    # Map booleans -> PASS/FAIL/—
-    fails_show = fails.copy()
+    show = fails.copy()
     for col in ["store_pass", "total_pass", "date_pass", "overall_pass"]:
-        fails_show[col] = fails_show[col].map(_status)
+        show[col] = show[col].map(_status)
 
-    view_cols = [
+    cols = [
         "receipt_id","receipt_file_id",
         "gold_store","pred_store","store_pass",
         "gold_total","pred_total","total_delta","total_pass",
         "gold_date","pred_date","date_pass",
-        "overall_pass"
+        "overall_pass",
     ]
+    st.dataframe(show[cols], use_container_width=True, hide_index=True)
 
-    st.dataframe(
-        fails_show[view_cols],
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # ——— Row-by-row expanders with receipt preview + side-by-side details
     st.markdown("### Inspect each mismatch")
-    for _, row in fails.iterrows():  # use original 'fails' booleans for expander logic
-        rid = row["receipt_id"]; rfid = row["receipt_file_id"]
-        label = f"{rid}  •  file:{rfid}  •  store:{row.get('pred_store') or '—'}"
+    for _, row in fails.iterrows():
+        rid = row["receipt_id"]; rfid = row.get("receipt_file_id")
+        label = f"{str(rid)[:8]}…  •  file:{str(rfid)[:8]+'…' if rfid else '—'}  •  store:{row.get('pred_store') or '—'}"
         with st.expander(label, expanded=False):
             left, right = st.columns([5, 7], gap="large")
             with left:
-                url = evals.receipt_image_url(rfid)
+                url = _signed_url(rfid)
                 if url:
                     st.image(url, use_container_width=True)
-                    st.caption(f"receipt_file_id: `{rfid}`")
                 else:
-                    st.info("Could not generate a signed URL for this image.")
+                    st.info("No image available for this receipt.")
+                st.caption(f"receipt_file_id: `{rfid or '—'}`")
 
             with right:
                 st.markdown("**Header comparison**")
+
                 def badge(ok, txt):
                     if ok is True:   return f"✅ {txt} — PASS"
                     if ok is False:  return f"🟡 {txt} — FAIL"
@@ -229,19 +337,19 @@ else:
                 date_ok  = row.get("date_pass")
                 delta    = row.get("total_delta")
 
-                c1, c2 = st.columns(2)
-                with c1:
+                cA, cB = st.columns(2)
+                with cA:
                     st.caption("Gold")
                     st.write(f"Store: {row.get('gold_store') or '—'}")
                     st.write(f"Total: {row.get('gold_total') if row.get('gold_total') is not None else '—'}")
                     st.write(f"Date:  {row.get('gold_date') or '—'}")
-                with c2:
-                    st.caption("Prediction")
+                with cB:
+                    st.caption("Prediction (receipts_dtl)")
                     st.write(badge(store_ok, f"Store: {row.get('pred_store') or '—'}"))
-                    pred_total = row.get("pred_total")
-                    total_txt = (f"{pred_total}  (Δ={delta:.2f})"
-                                 if (pred_total is not None and delta is not None)
-                                 else f"{pred_total if pred_total is not None else '—'}")
+                    pt = row.get("pred_total")
+                    total_txt = (f"{pt}  (Δ={delta:.2f})"
+                                 if (pt is not None and delta is not None)
+                                 else f"{pt if pt is not None else '—'}")
                     st.write(badge(total_ok, f"Total: {total_txt}"))
                     st.write(badge(date_ok,  f"Date:  {row.get('pred_date') or '—'}"))
 

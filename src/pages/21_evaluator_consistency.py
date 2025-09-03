@@ -1,7 +1,10 @@
 # src/pages/21_evaluator_consistency.py
+from __future__ import annotations
+
 import os
 import io
 import math
+import json
 import tempfile
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional
@@ -24,6 +27,7 @@ st.set_page_config(page_title="Evaluator — Consistency", layout="wide")
 st.title("🎯 Evaluator — Consistency (single receipt)")
 
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "genai-analytics-bucket")
+AGENT_VERSION   = os.getenv("AGENT_VERSION", "app")
 TOLERANCE = 0.05  # dollars: how close totals must be to count as same
 
 def sb():
@@ -100,12 +104,16 @@ def _invoke_agent_on_image_url(image_url: str) -> Dict[str, Any]:
     tmp = _bytes_to_tmp_jpg(b)
     try:
         res = receipt_graph.invoke({"image_path": tmp})
+    except Exception as e:
+        res = {"error": f"invoke-exception: {e}"}
     finally:
         try:
             os.remove(tmp)
         except Exception:
             pass
 
+    if isinstance(res, dict) and "error" in res:
+        return {"store_name": None, "total": None, "purchase_datetime": None, "error": res.get("error")}
     return _extract_fields_from_result(res)
 
 def _mode_or_none(values: List[Any]) -> Optional[Any]:
@@ -247,9 +255,30 @@ store_consistency = _percent_equal(stores, mode_store, numeric_tolerance=None)
 total_consistency = _percent_equal(totals, mode_total, numeric_tolerance=TOLERANCE) if mode_total is not None else 0.0
 date_consistency  = _percent_equal(dates, mode_date, numeric_tolerance=None)
 
-# Overall = mean of available field consistencies
+# Overall = mean of available field consistencies (percent)
 avail = [store_consistency, date_consistency] + ([total_consistency] if mode_total is not None else [])
 overall_consistency = sum(avail) / len(avail) if avail else 0.0
+
+# Per-run booleans vs mode (for pass rate + details)
+def _is_store_ok(s):
+    return (s is not None and mode_store is not None and s.strip().casefold() == mode_store.strip().casefold())
+def _is_total_ok(t):
+    return (isinstance(mode_total, (int, float)) and isinstance(t, (int, float)) and abs(t - mode_total) <= TOLERANCE)
+def _is_date_ok(d):
+    return (d is not None and mode_date is not None and d == mode_date)
+
+disp = df.copy()
+disp["store_ok"] = disp["store"].apply(_is_store_ok)
+disp["total_ok"] = disp["total"].apply(_is_total_ok) if mode_total is not None else False
+disp["date_ok"]  = disp["date"].apply(_is_date_ok)
+
+# Overall OK for a run = all available checks true
+if mode_total is not None:
+    overall_ok_series = disp["store_ok"] & disp["total_ok"] & disp["date_ok"]
+else:
+    overall_ok_series = disp["store_ok"] & disp["date_ok"]
+
+pass_rate_overall = float(overall_ok_series.mean()) if len(overall_ok_series) else 0.0  # fraction 0..1
 
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Store consistency", f"{store_consistency:.1f}%")
@@ -272,21 +301,12 @@ with c3:
     st.caption("Date (mode)")
     st.write(mode_date or "—")
 
-# Highlight mismatches vs mode
-disp = df.copy()
-def _fmt_total(x):
-    if x is None:
-        return "—"
-    try:
-        return f"{float(x):.2f}"
-    except Exception:
-        return str(x)
-
-disp["store_ok"] = disp["store"].apply(lambda s: (s is not None and mode_store is not None and s.strip().casefold() == mode_store.strip().casefold()))
-disp["total_ok"] = disp["total"].apply(lambda t: (isinstance(mode_total, (int, float)) and isinstance(t, (int, float)) and abs(t - mode_total) <= TOLERANCE))
-disp["date_ok"]  = disp["date"].apply(lambda d: (d is not None and mode_date is not None and d == mode_date))
-
+# Highlight mismatches vs mode (for display)
 pretty = disp[["run", "store", "store_ok", "total", "total_ok", "date", "date_ok", "error"]].copy()
+def _fmt_total(x):
+    if x is None: return "—"
+    try: return f"{float(x):.2f}"
+    except Exception: return str(x)
 pretty["total"] = pretty["total"].map(_fmt_total)
 pretty["store_ok"] = pretty["store_ok"].map(lambda b: "✔︎" if b else "✖︎")
 pretty["total_ok"] = pretty["total_ok"].map(lambda b: "✔︎" if b else "✖︎")
@@ -294,6 +314,60 @@ pretty["date_ok"]  = pretty["date_ok"].map(lambda b: "✔︎" if b else "✖︎"
 
 st.caption("Per-run agreement with the run-mode")
 st.dataframe(pretty, use_container_width=True, hide_index=True)
+
+# ----------------------- Save results to DB -----------------------
+# Convert percentages to fractions 0..1 for storage
+store_cons_frac = store_consistency / 100.0
+total_cons_frac = total_consistency / 100.0
+date_cons_frac  = date_consistency / 100.0
+overall_cons_frac = overall_consistency / 100.0
+
+details_payload = {
+    "runs": [
+        {
+            "run": int(r["run"]),
+            "store": None if pd.isna(r["store"]) else r["store"],
+            "total": None if pd.isna(r["total"]) else r["total"],
+            "date":  None if pd.isna(r["date"])  else r["date"],
+            "error": None if pd.isna(r["error"]) else r["error"],
+            "store_ok": bool(disp.iloc[i]["store_ok"]),
+            "total_ok": bool(disp.iloc[i]["total_ok"]) if mode_total is not None else None,
+            "date_ok":  bool(disp.iloc[i]["date_ok"]),
+        }
+        for i, r in df.iterrows()
+    ],
+    "tolerance": TOLERANCE,
+}
+
+row = {
+    "source_kind": "personal",
+    "receipt_id": rid,
+    "receipt_file_id": file_id,
+    "original_public_path": None,
+
+    "agent_version": AGENT_VERSION,
+
+    "trials": int(runs),
+    "store_consistency": store_cons_frac,
+    "total_consistency": total_cons_frac,
+    "date_consistency":  date_cons_frac,
+    "overall_consistency": overall_cons_frac,
+    "pass_rate_overall": pass_rate_overall,
+
+    "majority_store": mode_store,
+    "majority_total": mode_total,
+    "majority_purchase_date": mode_date,
+
+    "details": details_payload,
+    "extra": {},
+}
+
+try:
+    ins = sb().table("receipts_consistency_eval_results").insert(row).execute()
+    ins_id = ins.data[0]["id"] if getattr(ins, "data", None) else None
+    st.success(f"Saved results to receipts_consistency_eval_results (id: {ins_id}).")
+except Exception as e:
+    st.error(f"DB insert failed: {e}")
 
 st.caption(
     "This page checks how stable your agent’s header extraction is for a **single** receipt. "

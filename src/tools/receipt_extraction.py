@@ -112,6 +112,7 @@ class ProcessReceiptTool(BaseTool):
 
     def _run(self, image_path: str) -> dict:
         """
+
         `image_path` can be a local filesystem path OR an http(s) URL.
         We download URLs to a temp file so we can reuse encode_image_to_base64()
         unchanged (ensures identical encoding format to your existing flow).

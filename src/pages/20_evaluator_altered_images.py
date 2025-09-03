@@ -1,7 +1,18 @@
-# src/pages/20_evaluator_pertubed_images.py
+# src/pages/20_evaluator_altered_images.py
+# Evaluator — Perturbed Images (single-receipt)
+# - First dropdown lists receipt_id from public.receipt_perturbations
+# - Shows Original & Perturbed images side-by-side
+# - "Robustness Awareness" button runs the agent on both and writes results to
+#   public.receipts_robustness_eval_results
+
+from __future__ import annotations
+
 import os
 import io
+import re
+import json
 import math
+import hashlib
 import tempfile
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional
@@ -11,151 +22,130 @@ import streamlit as st
 import pandas as pd
 
 from utils.supabase_utils import get_supabase_client
-import utils.evals_repo as evals
+import utils.evals_repo as evals  # used for personal original image URL
 
-# Your LangGraph agent app (used to run predictions on images)
+# Your agent (optional; page still loads if not importable)
 try:
     from agents.receipt_extractor.agent import app as receipt_graph
 except Exception:
     receipt_graph = None
 
-st.set_page_config(page_title="Evaluator — Perturbed Images (Robustness)", layout="wide")
-st.title("🧪 Evaluator — Altered Images (Robustness)")
+st.set_page_config(page_title="Evaluator — Perturbed (Single)", layout="wide")
+st.title("🧪 Evaluator — Perturbed Images (Single Receipt)")
 
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "genai-analytics-bucket")
-TOLERANCE = 0.05  # $ tolerance for totals
+AGENT_VERSION = os.getenv("AGENT_VERSION", "app")
+TOLERANCE = 0.05   # dollar tolerance for total
 
-# -------------------------------------------------------------------
-# Supabase helpers
-# -------------------------------------------------------------------
+# ───────────────────────── Supabase helpers ─────────────────────────
+@st.cache_resource(show_spinner=False)
 def sb():
     return get_supabase_client()
 
-def make_signed_url(storage_path: str, ttl: int = 3600) -> Optional[str]:
+def signed_url(bucket: str, storage_path: str, ttl: int = 3600) -> Optional[str]:
+    """
+    Allows per-row bucket (perturbed_bucket) while defaulting to env bucket.
+    """
     try:
-        resp = sb().storage.from_(SUPABASE_BUCKET).create_signed_url(storage_path, ttl)
-        return resp.get("signedURL")
+        resp = sb().storage.from_(bucket).create_signed_url(storage_path, ttl)
+        if isinstance(resp, dict):
+            return resp.get("signedURL") or resp.get("signed_url") or resp.get("url")
+        return getattr(resp, "signedURL", None) or getattr(resp, "signed_url", None) or getattr(resp, "url", None)
     except Exception:
         return None
 
-def list_storage(path_prefix: str) -> List[Dict[str, Any]]:
-    """List objects directly under a folder (no recursion)."""
-    try:
-        items = sb().storage.from_(SUPABASE_BUCKET).list(path_prefix)
-        return items or []
-    except Exception:
-        return []
-
-# -------------------------------------------------------------------
-# Data access (gold + originals)
-# -------------------------------------------------------------------
+# ──────────────────────── Data access helpers ───────────────────────
 @st.cache_data(ttl=60)
-def list_public(dataset: str, limit: int = 1000) -> List[Dict[str, Any]]:
-    table = {
-        "sroie": "Receiptscanner_gold_public_dataset_sroie",
-        "expressexpense": "Receiptscanner_gold_public_dataset_expressexpense",
-    }[dataset]
+def list_receipt_ids_from_mappings(limit: int = 1000) -> List[str]:
+    """
+    Return distinct receipt ids from receipt_perturbations (personal only).
+    For public rows (no receipt_id), we still include a pseudo-id based on original_public_path.
+    """
     rows = (
-        sb().table(table)
-        .select("id, source_id, image_storage_path, store_name_gold, total_gold, purchase_date_gold")
+        sb()
+        .table("receipt_perturbations")
+        .select("source_kind, original_receipt_id, original_public_path, insrt_dttm")
+        .order("insrt_dttm", desc=True)
         .limit(limit)
         .execute()
         .data or []
     )
-    out = []
+    ids: List[str] = []
+    seen = set()
     for r in rows:
-        rid = r.get("source_id") or r.get("id")
-        out.append({
-            "receipt_id": str(rid),
-            "image_path": r.get("image_storage_path"),
-            "gold_store": r.get("store_name_gold"),
-            "gold_total": r.get("total_gold"),
-            "gold_date": r.get("purchase_date_gold"),
-            "label": f"{rid} • {r.get('image_storage_path')}",
-        })
-    return out
+        rid = r.get("original_receipt_id")
+        if rid:
+            if rid not in seen:
+                seen.add(rid)
+                ids.append(rid)
+        else:
+            # Use basename of public path as a pseudo-id (still traceable)
+            op = r.get("original_public_path") or ""
+            name = op.split("/")[-1] if op else None
+            if name and name not in seen:
+                seen.add(name)
+                ids.append(name)
+    return ids
 
 @st.cache_data(ttl=60)
-def list_personal(limit: int = 500) -> List[Dict[str, Any]]:
+def mappings_for_receipt_id(receipt_or_name: str) -> List[Dict[str, Any]]:
     """
-    Personal receipts + current gold.
+    Fetch all mapping rows for a given id (handles both personal and public pseudo-id)
     """
-    dtl = (
-        sb().table("receipts_dtl")
-        .select("id, receipt_file_id")
-        .order("created_at", desc=True)
-        .limit(limit)
+    # Try personal first (uuid receipt_id)
+    rows = (
+        sb().table("receipt_perturbations")
+        .select("id, source_kind, original_receipt_id, original_receipt_file_id, original_public_path, "
+                "perturbed_storage_path, perturbed_bucket, perturbed_receipt_file_id, "
+                "perturb_type, params, insrt_dttm")
+        .eq("original_receipt_id", receipt_or_name)
+        .order("insrt_dttm", desc=True)
+        .limit(50)
         .execute()
         .data or []
     )
-    idx = {d["id"]: d for d in dtl}
+    if rows:
+        return rows
 
-    gold = (
-        sb().table("receipts_gold")
-        .select("receipt_id, store_name_gold, total_gold, purchase_date_gold, curr_rec_ind")
-        .eq("curr_rec_ind", True)
-        .limit(limit * 2)
+    # Else, public by filename
+    # We match by basename of original_public_path to keep selection simple
+    all_rows = (
+        sb().table("receipt_perturbations")
+        .select("id, source_kind, original_receipt_id, original_receipt_file_id, original_public_path, "
+                "perturbed_storage_path, perturbed_bucket, perturbed_receipt_file_id, "
+                "perturb_type, params, insrt_dttm")
+        .is_("original_receipt_id", None)
+        .order("insrt_dttm", desc=True)
+        .limit(200)
         .execute()
         .data or []
     )
-    out = []
-    for g in gold:
-        rid = g.get("receipt_id")
-        d = idx.get(rid)
-        if not d:
-            continue
-        out.append({
-            "receipt_id": str(rid),
-            "receipt_file_id": d.get("receipt_file_id"),
-            "gold_store": g.get("store_name_gold"),
-            "gold_total": g.get("total_gold"),
-            "gold_date": g.get("purchase_date_gold"),
-            "label": f"{rid} • file:{d.get('receipt_file_id')}",
-        })
-    return out
+    want = []
+    for r in all_rows:
+        op = r.get("original_public_path") or ""
+        name = op.split("/")[-1] if op else ""
+        if name == receipt_or_name:
+            want.append(r)
+    return want
 
-def original_signed_url_public(row: Dict[str, Any]) -> Optional[str]:
-    return make_signed_url(row["image_path"])
+@st.cache_data(ttl=60)
+def fetch_current_gold_for_personal(receipt_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        rows = (
+            sb()
+            .table("receipts_gold")
+            .select("receipt_id, store_name_gold, total_gold, purchase_date_gold, curr_rec_ind")
+            .eq("receipt_id", receipt_id)
+            .eq("curr_rec_ind", True)
+            .limit(1)
+            .execute()
+            .data or []
+        )
+        return rows[0] if rows else None
+    except Exception:
+        return None
 
-def original_signed_url_personal(row: Dict[str, Any]) -> Optional[str]:
-    return evals.receipt_image_url(row["receipt_file_id"])
-
-# -------------------------------------------------------------------
-# Perturbed files (FLAT FOLDER): pertubed_images/
-#   expected names: {receipt_id}_pertubed_{ptype}.jpg|jpeg|png
-# -------------------------------------------------------------------
-PERTURBED_FOLDER = "pertubed_images"
-
-def list_perturbed_ids_for_type(ptype: str) -> Dict[str, str]:
-    """
-    Return a map {receipt_id: filename} for files in pertubed_images/
-    that match the chosen perturbation type and allowed extensions.
-    """
-    files = list_storage(PERTURBED_FOLDER)
-    rid_to_file: Dict[str, str] = {}
-    endings = [
-        f"_pertubed_{ptype}.jpg",
-        f"_pertubed_{ptype}.jpeg",
-        f"_pertubed_{ptype}.png",
-    ]
-    for f in files:
-        name = (f.get("name") or "").strip()
-        if not name or name.startswith("_"):  # skip healthcheck, etc
-            continue
-        for suffix in endings:
-            if name.lower().endswith(suffix):
-                rid = name[: -len(suffix)]
-                rid_to_file[rid] = name
-                break
-    return rid_to_file
-
-def signed_url_for_perturbed(filename: str) -> Optional[str]:
-    path = f"{PERTURBED_FOLDER}/{filename}"
-    return make_signed_url(path)
-
-# -------------------------------------------------------------------
-# Prediction helpers
-# -------------------------------------------------------------------
+# ───────────────────────── Image helpers ─────────────────────────
 def download_bytes(url: str) -> Optional[bytes]:
     try:
         r = requests.get(url, timeout=25)
@@ -164,34 +154,24 @@ def download_bytes(url: str) -> Optional[bytes]:
     except Exception:
         return None
 
-def to_temp_file(b: bytes, suffix=".jpg") -> str:
-    fd, path = tempfile.mkstemp(prefix="robust_", suffix=suffix)
+def temp_path_for_bytes(b: bytes, suffix=".jpg") -> str:
+    fd, path = tempfile.mkstemp(prefix="robust_one_", suffix=suffix)
     with os.fdopen(fd, "wb") as f:
         f.write(b)
     return path
 
-def norm_date(x) -> Optional[str]:
-    if not x:
-        return None
-    if isinstance(x, date):
-        return x.isoformat()
-    if isinstance(x, str):
-        try:
-            return datetime.fromisoformat(x.replace("Z", "")).date().isoformat()
-        except Exception:
-            return x[:10] if len(x) >= 10 else x
-    return None
+def normalize_ext_from_url(url: str) -> str:
+    base = url.split("?", 1)[0]
+    m = re.search(r"\.([A-Za-z0-9]+)$", base)
+    ext = (m.group(1) if m else "").lower()
+    if ext in ("jpg", "jpeg"): return "jpg"
+    if ext == "png": return "png"
+    return "jpg"
 
-def to_float(v) -> Optional[float]:
-    try:
-        if v in (None, "", "None"):
-            return None
-        f = float(v)
-        return f if math.isfinite(f) else None
-    except Exception:
-        return None
-
+# ───────────────────────── Agent helpers ─────────────────────────
 def run_agent_on_image_url(image_url: str) -> Dict[str, Any]:
+    if not image_url:
+        return {"error": "no-url"}
     if receipt_graph is None:
         return {"error": "agent-not-imported"}
 
@@ -199,27 +179,19 @@ def run_agent_on_image_url(image_url: str) -> Dict[str, Any]:
     if not b:
         return {"error": "download-failed"}
 
-    suffix = ".jpg"  # or use original extension if you’re tracking it
-    path = to_temp_file(b, suffix=suffix)
-
+    # Use extension for temp if possible
+    suffix = "." + normalize_ext_from_url(image_url)
+    path = temp_path_for_bytes(b, suffix=suffix)
     try:
         try:
             res = receipt_graph.invoke({"image_path": path})
         except Exception as e:
             return {"error": "invoke-exception", "exception": str(e)}
 
-        # Log what actually came back
         if res is None:
             return {"error": "invoke-returned-none"}
 
-        # If it isn’t a dict, report the type and repr
-        res=receipt_graph.invoke({"image_path":path})
-
-        if not isinstance(res, dict):
-            return {"error": "unexpected-response-type", "type": str(type(res)), "repr": repr(res)}
-        
-        # If it is a dict, inspect keys so we don’t crash
-        # Try both shapes you’ve used before:
+        # Normalize response shapes you’ve used before
         header = (
             (res.get("receipt_data") or {}).get("header") or
             res.get("header") or
@@ -230,7 +202,6 @@ def run_agent_on_image_url(image_url: str) -> Dict[str, Any]:
             res.get("totals") or
             {}
         )
-
         pred_store = header.get("store_name")
         pred_total = header.get("total") or totals.get("grand_total")
         pred_date  = header.get("purchase_datetime")
@@ -239,20 +210,35 @@ def run_agent_on_image_url(image_url: str) -> Dict[str, Any]:
             "store_name": pred_store,
             "total": pred_total,
             "purchase_datetime": pred_date,
-            "raw": {"keys": list(res.keys())}  # small, safe echo for debugging
+            "raw": {"keys": list(res.keys())}
         }
 
     finally:
+        try: os.remove(path)
+        except Exception: pass
+
+# ───────────────────────── Eval helpers ─────────────────────────
+def norm_date(x) -> Optional[str]:
+    if not x: return None
+    if isinstance(x, date): return x.isoformat()
+    if isinstance(x, str):
         try:
-            os.remove(path)
+            return datetime.fromisoformat(x.replace("Z", "")).date().isoformat()
         except Exception:
-            pass
+            return x[:10] if len(x) >= 10 else x
+    return None
 
+def to_float(v) -> Optional[float]:
+    try:
+        if v in (None, "", "None"): return None
+        f = float(v); return f if math.isfinite(f) else None
+    except Exception:
+        return None
 
-def score_vs_gold(pred: Dict[str, Any], gold: Dict[str, Any]) -> Dict[str, Any]:
-    g_store = (gold.get("gold_store") or None)
-    g_total = to_float(gold.get("gold_total"))
-    g_date  = norm_date(gold.get("gold_date"))
+def compare_to_gold(pred: Dict[str, Any], gold: Dict[str, Any]) -> Dict[str, Any]:
+    g_store = (gold.get("store_name_gold") or None)
+    g_total = to_float(gold.get("total_gold"))
+    g_date  = norm_date(gold.get("purchase_date_gold"))
 
     p_store = (pred.get("store_name") or None)
     p_total = to_float(pred.get("total"))
@@ -262,8 +248,7 @@ def score_vs_gold(pred: Dict[str, Any], gold: Dict[str, Any]) -> Dict[str, Any]:
     if g_store or p_store:
         store_ok = ((g_store or "").strip().casefold() == (p_store or "").strip().casefold())
 
-    total_ok = None
-    delta = None
+    total_ok = None; delta = None
     if g_total is not None and p_total is not None:
         delta = abs(p_total - g_total)
         total_ok = (delta <= TOLERANCE)
@@ -274,214 +259,268 @@ def score_vs_gold(pred: Dict[str, Any], gold: Dict[str, Any]) -> Dict[str, Any]:
 
     overall = None
     avail = [x for x in (store_ok, total_ok, date_ok) if x is not None]
-    if avail:
-        overall = all(avail)
+    if avail: overall = all(avail)
 
     return {
-        "pred_store": p_store, "gold_store": g_store, "store_pass": store_ok,
-        "pred_total": p_total, "gold_total": g_total, "total_delta": delta, "total_pass": total_ok,
-        "pred_date": p_date, "gold_date": g_date, "date_pass": date_ok,
-        "overall_pass": overall
+        "gold_store": g_store, "pred_store": p_store, "store_pass": store_ok,
+        "gold_total": g_total, "pred_total": p_total, "total_delta": delta, "total_pass": total_ok,
+        "gold_date": g_date,  "pred_date": p_date,  "date_pass": date_ok,
+        "overall_pass": overall,
     }
 
-# -------------------------------------------------------------------
-# UI controls
-# -------------------------------------------------------------------
-c_src, c_ptype = st.columns([2, 2])
+def compare_baseline_vs_perturbed(baseline: Dict[str, Any], perturbed: Dict[str, Any]) -> Dict[str, Any]:
+    # Soft comparison for self-consistency (no gold):
+    b_store = (baseline.get("store_name") or "").strip().casefold()
+    p_store = (perturbed.get("store_name") or "").strip().casefold()
+    store_same = (b_store == p_store) if (b_store or p_store) else None
 
-with c_src:
-    src = st.radio("Dataset source", ["Public", "Personal"], horizontal=True)
+    bt = to_float(baseline.get("total"))
+    pt = to_float(perturbed.get("total"))
+    total_same = None
+    total_delta = None
+    if bt is not None and pt is not None:
+        total_delta = abs(bt - pt)
+        total_same = (total_delta <= TOLERANCE)
 
-dataset = None
-rows: List[Dict[str, Any]] = []
-make_orig_url = None
+    bd = norm_date(baseline.get("purchase_datetime"))
+    pd_ = norm_date(perturbed.get("purchase_datetime"))
+    date_same = (bd == pd_) if (bd or pd_) else None
 
-if src == "Public":
-    dataset = st.radio("Public dataset", ["expressexpense", "sroie"], horizontal=True, key="rob_ds")
-    rows = list_public(dataset)
-    make_orig_url = original_signed_url_public
-else:
-    rows = list_personal()
-    make_orig_url = original_signed_url_personal
+    overall = None
+    avail = [x for x in (store_same, total_same, date_same) if x is not None]
+    if avail: overall = all(avail)
 
-with c_ptype:
-    ptype = st.selectbox(
-        "Perturbation type",
-        ["rotate_fixed", "blur(WIP)", "brightness(WIP)", "contrast(WIP)", "rotate(WIP)", "crop(WIP)", "noise(WIP)"],
-        index=0,
-        help="Files are read from bucket folder 'pertubed_images/'."
-    )
+    return {
+        "store_same": store_same,
+        "total_same": total_same,
+        "total_delta": total_delta,
+        "date_same": date_same,
+        "overall_same": overall
+    }
 
+# ───────────────────────── UI: pick receipt ─────────────────────────
+ids = list_receipt_ids_from_mappings()
+if not ids:
+    st.info("No entries in public.receipt_perturbations yet. Create perturbed images first.")
+    st.stop()
+
+rid = st.selectbox("Select receipt_id (from mappings)", ids, index=0)
+
+# gather all variants (latest first)
+rows = mappings_for_receipt_id(rid)
 if not rows:
-    st.info("No receipts found for the selected source. Add gold or ingest a public dataset first.")
+    st.warning("No mapping rows found for that receipt.")
     st.stop()
 
-# Which receipts have a perturbed file available (in flat folder)
-rid_to_file = list_perturbed_ids_for_type(ptype)
-eligible = [r for r in rows if r["receipt_id"] in rid_to_file]
+# choose variant (if only one, this selector is hidden)
+def _variant_label(r: Dict[str, Any]) -> str:
+    ptype = r.get("perturb_type") or "unknown"
+    params = r.get("params") or {}
+    if isinstance(params, dict) and "angle" in params:
+        return f"{ptype} (angle={params['angle']})"
+    return ptype
 
-if not eligible:
-    st.warning(
-        f"No perturbed images found in '{PERTURBED_FOLDER}' for type “{ptype}”. "
-        f"Expected filenames like '{{receipt_id}}_pertubed_{ptype}.jpg|png'."
-    )
-    st.stop()
+variant = rows[0] if len(rows) == 1 else st.selectbox(
+    "Variant",
+    rows,
+    format_func=_variant_label
+)
 
-# (soft) cap to keep runs reasonable
-eligible = eligible[:300]
-st.caption(f"Evaluating {len(eligible)} receipts with available perturbed images (type: {ptype}).")
+# build URLs
+source_kind = variant.get("source_kind")
+orig_url: Optional[str] = None
 
-run_btn = st.button("Run robustness evaluation", type="primary", use_container_width=True)
-if not run_btn:
-    st.stop()
+if source_kind == "personal" and variant.get("original_receipt_file_id"):
+    orig_url = evals.receipt_image_url(variant["original_receipt_file_id"])
+elif source_kind == "public" and variant.get("original_public_path"):
+    # Use the default bucket for original public images (your datasets live there)
+    orig_url = signed_url(SUPABASE_BUCKET, variant["original_public_path"])
+else:
+    orig_url = None
 
-# -------------------------------------------------------------------
-# Run evaluation
-# -------------------------------------------------------------------
-baseline_results = []
-perturbed_results = []
+pert_bucket = variant.get("perturbed_bucket") or SUPABASE_BUCKET
+pert_path = variant.get("perturbed_storage_path")
+pert_url = signed_url(pert_bucket, pert_path) if pert_path else None
 
-prog = st.progress(0.0, text="Running predictions…")
+# ───────────────────────── Show images ─────────────────────────
+c1, c2 = st.columns(2)
+with c1:
+    st.markdown("### Original")
+    if orig_url: st.image(orig_url, use_container_width=True)
+    else:        st.info("No original URL available for this row.")
 
-for i, r in enumerate(eligible, start=1):
-    rid = r["receipt_id"]
-    gold = {"gold_store": r.get("gold_store"), "gold_total": r.get("gold_total"), "gold_date": r.get("gold_date")}
-
-    # original
-    orig_url = make_orig_url(r)
-    base_pred = run_agent_on_image_url(orig_url) if orig_url else {"error": "no-original-url"}
-    base_score = score_vs_gold(base_pred, gold)
-    baseline_results.append({"receipt_id": rid, "original_url": orig_url, **base_score})
-
-    # perturbed (from flat folder)
-    pert_file = rid_to_file.get(rid)
-    pert_url = signed_url_for_perturbed(pert_file) if pert_file else None
-    pert_pred = run_agent_on_image_url(pert_url) if pert_url else {"error": "no-perturbed-url"}
-    pert_score = score_vs_gold(pert_pred, gold)
-    perturbed_results.append({"receipt_id": rid, "perturbed_url": pert_url, **pert_score})
-
-    prog.progress(i / len(eligible), text=f"Running predictions… {i}/{len(eligible)}")
-
-prog.empty()
-
-base_df = pd.DataFrame(baseline_results)
-pert_df = pd.DataFrame(perturbed_results)
-
-def acc(df, col):
-    s = df[col].dropna()
-    return float(s.mean()) * 100.0 if len(s) else None
-
-# KPIs
-b_store = acc(base_df, "store_pass")
-p_store = acc(pert_df, "store_pass")
-b_total = acc(base_df, "total_pass")
-p_total = acc(pert_df, "total_pass")
-b_date  = acc(base_df, "date_pass")
-p_date  = acc(pert_df, "date_pass")
-b_over  = acc(base_df, "overall_pass")
-p_over  = acc(pert_df, "overall_pass")
-
-k1, k2, k3 = st.columns(3)
-k1.metric("Store match", f"{(p_store or 0):.1f}%", delta=f"{((p_store or 0)-(b_store or 0)):.1f} pp")
-k2.metric("Total within ±$0.05", f"{(p_total or 0):.1f}%", delta=f"{((p_total or 0)-(b_total or 0)):.1f} pp")
-k3.metric("Date match", f"{(p_date or 0):.1f}%", delta=f"{((p_date or 0)-(b_date or 0)):.1f} pp")
-
-k4 = st.columns(1)[0]
-k4.metric("Overall (all 3)", f"{(p_over or 0):.1f}%", delta=f"{((p_over or 0)-(b_over or 0)):.1f} pp")
+with c2:
+    ptype = variant.get("perturb_type") or "perturbed"
+    st.markdown(f"### Perturbed — {ptype}")
+    if pert_url: st.image(pert_url, use_container_width=True)
+    else:        st.info("No perturbed URL available for this row.")
 
 st.divider()
 
-# -------------------------------------------------------------------
-# Failures / inspection
-# -------------------------------------------------------------------
-st.subheader("🔎 Inspect differences")
+# ───────────────── Robustness Awareness (run test) ─────────────────
+run_btn = st.button("🛡️ Robustness Awareness", type="primary", use_container_width=True)
 
-merged = pd.merge(
-    base_df[["receipt_id", "store_pass", "total_pass", "date_pass", "overall_pass"]],
-    pert_df[["receipt_id", "store_pass", "total_pass", "date_pass", "overall_pass"]],
-    on="receipt_id",
-    suffixes=("_base", "_pert")
-)
+if run_btn:
+    if not (orig_url and pert_url):
+        st.error("Missing URLs for original or perturbed image.")
+        st.stop()
 
-def worsened(row) -> bool:
-    for col in ["store_pass", "total_pass", "date_pass", "overall_pass"]:
-        b = row[f"{col}_base"]
-        p = row[f"{col}_pert"]
-        if b is True and p is False:
-            return True
-    return False
+    with st.status("Running predictions on both images…", expanded=True) as s:
+        base_pred = run_agent_on_image_url(orig_url)
+        st.write({"baseline_pred": {k: base_pred.get(k) for k in ("store_name","total","purchase_datetime","error")}})
 
-merged["worsened"] = merged.apply(worsened, axis=1)
-show = merged[(merged["worsened"]) | (merged["overall_pass_pert"] == False)].copy()
+        pert_pred = run_agent_on_image_url(pert_url)
+        st.write({"perturbed_pred": {k: pert_pred.get(k) for k in ("store_name","total","purchase_datetime","error")}})
 
-def label_bool(b):
-    return "PASS" if b is True else ("FAIL" if b is False else "—")
+        # Self-consistency
+        self_cmp = compare_baseline_vs_perturbed(base_pred, pert_pred)
+        st.write({"self_consistency": self_cmp})
 
-if show.empty:
-    st.success("No degradations detected for the selected perturbed set.")
-else:
-    view = show.copy()
-    for c in ["store_pass_base","store_pass_pert","total_pass_base","total_pass_pert",
-              "date_pass_base","date_pass_pert","overall_pass_base","overall_pass_pert"]:
-        view[c] = view[c].map(label_bool)
-    st.dataframe(view[["receipt_id",
-                       "store_pass_base","store_pass_pert",
-                       "total_pass_base","total_pass_pert",
-                       "date_pass_base","date_pass_pert",
-                       "overall_pass_base","overall_pass_pert"]],
-                 use_container_width=True, hide_index=True)
+        # Vs-gold (only for personal)
+        gold_row = None
+        if source_kind == "personal" and variant.get("original_receipt_id"):
+            gold_row = fetch_current_gold_for_personal(variant["original_receipt_id"])
 
-    st.markdown("### Receipt details")
+        if gold_row:
+            base_vs_gold = compare_to_gold(base_pred, gold_row)
+            pert_vs_gold = compare_to_gold(pert_pred, gold_row)
+        else:
+            base_vs_gold = None
+            pert_vs_gold = None
 
-    bmap = {r["receipt_id"]: r for _, r in base_df.iterrows()}
-    pmap = {r["receipt_id"]: r for _, r in pert_df.iterrows()}
-    orig_url_map = {r["receipt_id"]: r["original_url"] for _, r in base_df.iterrows()}
-    pert_url_map = {r["receipt_id"]: r["perturbed_url"] for _, r in pert_df.iterrows()}
+        s.update(label="Saving results…", state="running")
 
-    for _, row in show.iterrows():
-        rid = row["receipt_id"]
-        with st.expander(f"{rid}", expanded=False):
-            c1, c2 = st.columns(2)
-            with c1:
-                st.caption("Original")
-                url = orig_url_map.get(rid)
-                if url:
-                    st.image(url, use_container_width=True)
-                else:
-                    st.info("No original URL.")
-            with c2:
-                st.caption(f"Perturbed — {ptype}")
-                urlp = pert_url_map.get(rid)
-                if urlp:
-                    st.image(urlp, use_container_width=True)
-                else:
-                    st.info("No perturbed URL.")
+        # ───────────── Persist results to receipts_robustness_eval_results ─────────────
+        try:
+            prms = variant.get("params")
+            if isinstance(prms, (dict, list)):
+                prms_hash = hashlib.sha1(json.dumps(prms, sort_keys=True).encode("utf-8")).hexdigest()
+            else:
+                prms_hash = hashlib.sha1(str(prms).encode("utf-8")).hexdigest() if prms is not None else None
 
-            b = bmap.get(rid, {})
-            p = pmap.get(rid, {})
+            row = {
+                "source_kind": source_kind,                              # 'personal' | 'public'
+                "receipt_id": variant.get("original_receipt_id"),        # None for public
+                "receipt_file_id": variant.get("original_receipt_file_id"),
+                "original_public_path": variant.get("original_public_path"),
 
-            def badge(ok, txt):
-                if ok is True:   return f"✅ {txt} — PASS"
-                if ok is False:  return f"🟡 {txt} — FAIL"
-                return f"— {txt}"
+                "perturb_type": variant.get("perturb_type"),
+                "params": prms,
+                "params_hash": prms_hash,
+                "perturbed_storage_path": pert_path,
+                "perturbed_bucket": pert_bucket,
+                "perturbed_receipt_file_id": variant.get("perturbed_receipt_file_id"),
 
-            st.markdown("**Header comparison vs gold**")
-            c3, c4 = st.columns(2)
-            with c3:
-                st.caption("Baseline prediction")
-                st.write(badge(b.get("store_pass"), f"Store: {b.get('gold_store') or '—'} vs {b.get('pred_store') or '—'}"))
-                tot_txt = f"{b.get('pred_total')}  (Δ={b.get('total_delta'):.2f})" if b.get("total_delta") is not None else f"{b.get('pred_total')}"
-                st.write(badge(b.get("total_pass"), f"Total: {b.get('gold_total')} vs {tot_txt}"))
-                st.write(badge(b.get("date_pass"),  f"Date:  {b.get('gold_date')} vs {b.get('pred_date')}"))
-            with c4:
-                st.caption("Perturbed prediction")
-                st.write(badge(p.get("store_pass"), f"Store: {p.get('gold_store') or '—'} vs {p.get('pred_store') or '—'}"))
-                tot_txt2 = f"{p.get('pred_total')}  (Δ={p.get('total_delta'):.2f})" if p.get("total_delta") is not None else f"{p.get('pred_total')}"
-                st.write(badge(p.get("total_pass"), f"Total: {p.get('gold_total')} vs {tot_txt2}"))
-                st.write(badge(p.get("date_pass"),  f"Date:  {p.get('gold_date')} vs {p.get('pred_date')}"))
+                "agent_version": AGENT_VERSION,
+
+                # Baseline (original)
+                "base_store": base_pred.get("store_name"),
+                "base_total": to_float(base_pred.get("total")),
+                "base_purchase_date": norm_date(base_pred.get("purchase_datetime")),
+                "base_error": base_pred.get("error"),
+
+                # Perturbed
+                "pert_store": pert_pred.get("store_name"),
+                "pert_total": to_float(pert_pred.get("total")),
+                "pert_purchase_date": norm_date(pert_pred.get("purchase_datetime")),
+                "pert_error": pert_pred.get("error"),
+
+                # Self-consistency
+                "self_store_same": self_cmp.get("store_same"),
+                "self_total_same": self_cmp.get("total_same"),
+                "self_total_delta": self_cmp.get("total_delta"),
+                "self_date_same": self_cmp.get("date_same"),
+                "self_overall_same": self_cmp.get("overall_same"),
+
+                # small debug payload
+                "extra": {
+                    "baseline_keys": list((base_pred or {}).keys()),
+                    "perturbed_keys": list((pert_pred or {}).keys())
+                }
+            }
+
+            if gold_row:
+                # make sure gold types align to table
+                row.update({
+                    "gold_store": gold_row.get("store_name_gold"),
+                    "gold_total": gold_row.get("total_gold"),
+                    "gold_date":  norm_date(gold_row.get("purchase_date_gold")),
+                })
+                row.update({
+                    "base_store_pass":   base_vs_gold.get("store_pass"),
+                    "base_total_pass":   base_vs_gold.get("total_pass"),
+                    "base_total_delta":  base_vs_gold.get("total_delta"),
+                    "base_date_pass":    base_vs_gold.get("date_pass"),
+                    "base_overall_pass": base_vs_gold.get("overall_pass"),
+                })
+                row.update({
+                    "pert_store_pass":   pert_vs_gold.get("store_pass"),
+                    "pert_total_pass":   pert_vs_gold.get("total_pass"),
+                    "pert_total_delta":  pert_vs_gold.get("total_delta"),
+                    "pert_date_pass":    pert_vs_gold.get("date_pass"),
+                    "pert_overall_pass": pert_vs_gold.get("overall_pass"),
+                })
+
+            ins = sb().table("receipts_robustness_eval_results").insert(row).execute()
+            s.update(label="Done.", state="complete")
+            st.success("Results saved to receipts_robustness_eval_results")
+            st.caption("Inserted row (truncated fields shown):")
+            st.write({
+                "id": (ins.data[0]["id"] if getattr(ins, "data", None) else None),
+                "source_kind": row["source_kind"],
+                "receipt_id": row["receipt_id"],
+                "perturb_type": row["perturb_type"],
+                "params": row["params"],
+                "self_overall_same": row["self_overall_same"],
+            })
+
+        except Exception as e:
+            s.update(label="Save failed.", state="error")
+            st.error(f"DB insert failed: {e}")
+
+    # KPIs / badges
+    st.markdown("### Results")
+
+    def badge_bool(b, txt_ok="PASS", txt_fail="FAIL"):
+        if b is True:  return f"✅ {txt_ok}"
+        if b is False: return f"🟡 {txt_fail}"
+        return "—"
+
+    csc1, csc2, csc3, csc4 = st.columns(4)
+    csc1.metric("Store same", badge_bool(self_cmp["store_same"]))
+    csc2.metric("Total within ±$0.05", badge_bool(self_cmp["total_same"]))
+    csc3.metric("Date same", badge_bool(self_cmp["date_same"]))
+    csc4.metric("Overall", badge_bool(self_cmp["overall_same"]))
+
+    if gold_row:
+        st.markdown("#### Vs Gold (personal)")
+
+        def label_vs_gold(d: Dict[str, Any]) -> List[str]:
+            out = []
+            out.append(f"Store — {badge_bool(d['store_pass'])}: {d['gold_store']} vs {d['pred_store']}")
+            if d["total_delta"] is not None:
+                out.append(f"Total — {badge_bool(d['total_pass'])}: {d['gold_total']} vs {d['pred_total']} (Δ={d['total_delta']:.2f})")
+            else:
+                out.append(f"Total — {badge_bool(d['total_pass'])}: {d['gold_total']} vs {d['pred_total']}")
+            out.append(f"Date — {badge_bool(d['date_pass'])}: {d['gold_date']} vs {d['pred_date']}")
+            out.append(f"Overall — {badge_bool(d['overall_pass'])}")
+            return out
+
+        base_vs_gold = compare_to_gold(base_pred, gold_row)
+        pert_vs_gold = compare_to_gold(pert_pred, gold_row)
+        btxt = label_vs_gold(base_vs_gold)
+        ptxt = label_vs_gold(pert_vs_gold)
+
+        vg1, vg2 = st.columns(2)
+        with vg1:
+            st.caption("Baseline vs Gold")
+            for line in btxt: st.write(line)
+        with vg2:
+            st.caption("Perturbed vs Gold")
+            for line in ptxt: st.write(line)
 
 st.caption(
-    "This evaluator compares **baseline vs perturbed** performance against gold labels. "
-    f"Perturbed samples are read from Supabase Storage under "
-    f"`{SUPABASE_BUCKET}/pertubed_images/{{receipt_id}}_pertubed_{{type}}.(jpg|jpeg|png)`."
+    "Pick a receipt from `public.receipt_perturbations`. "
+    "This tool runs your extractor on both the original and the chosen perturbed image, "
+    "reports self-consistency, (for personal) vs gold, and persists results."
 )

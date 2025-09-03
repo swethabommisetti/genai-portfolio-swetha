@@ -9,7 +9,7 @@ from typing import TypedDict, Optional, Dict, Any
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 
-from utils.supabase_utils import get_groq_api_key
+from utils.supabase_utils  import get_groq_api_key
 from tools.receipt_extraction import ProcessReceiptTool
 
 # ---- env hygiene --------------------------------------------------------------
