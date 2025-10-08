@@ -2,11 +2,11 @@ import streamlit as st
 
 st.set_page_config(page_title="BookRecommender", layout="wide")
 
-st.title("BookRecommender Agent")
-st.caption("??")
+st.title("Book Recommender Agent")
+st.caption("")
 
 # CTA → go to pages/1_provision.py
-if st.button("Run the Scan", use_container_width=False):
+if st.button("RUN the Scan", use_container_width=False):
     st.switch_page("pages/2_bookrecommender_run.py")
 
 

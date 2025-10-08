@@ -2,7 +2,7 @@ import streamlit as st
 
 st.set_page_config(page_title="ReceiptScanner", layout="wide")
 
-st.title("ReceiptScanner Agent")
+st.title("Receipt Scanner Agent")
 st.caption("Digitize Day to Day Receipts")
 
 # CTA → go to pages/1_receiptscanner_run.py
@@ -27,10 +27,12 @@ with right:
         "- Solves my real world problem"
     )
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3,c4  = st.columns(4)
 if c1.button("Upload"):
     st.switch_page("pages/1_receiptscanner_run.py")
 if c2.button("Extract"):
     st.switch_page("pages/12_receiptscanner_documentation.py")  # if your extract UI is here, otherwise point to the actual extract page
 if c3.button("Analytics"):
     st.switch_page("pages/13_receiptscanner_analytics.py")
+if c4.button("Chat"):
+    st.switch_page("pages/10_receiptscanner_chat.py")

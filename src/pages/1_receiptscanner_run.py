@@ -16,7 +16,7 @@ from utils.email_utils import prompt_for_optional_email
 
 
 def run_receipt_scanner():
-    # ---------------------------------
+    # ----------------------------------
     # 0. Optional email capture
     # ---------------------------------
     st.title("📸 Receipt Scanner Agent")

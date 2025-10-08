@@ -167,6 +167,7 @@ receiptscanner_agent = st.Page("receiptscanner_homepage.py", title="ReceiptScann
 receiptscanner_run = st.Page("pages/1_receiptscanner_run.py", title="Execute", icon="▶️")
 receiptscanner_documentation = st.Page("pages/12_receiptscanner_documentation.py", title="Documentation", icon="📑")
 receiptscanner_analytics = st.Page("pages/13_receiptscanner_analytics.py", title="Analytics", icon="📊")
+receiptscanner_chat = st.Page("pages/10_receiptscanner_chat.py", title="Chat", icon="💬")
 # Evaluator (ReceiptScanner) pages
 receiptscanner_evaluator_home=st.Page("pages/14_evaluator_home.py",title="Evaluator")
 receiptscanner_evaluator_manual = st.Page("pages/15_evaluator_manual_scoring.py", title="Evaluator – Gold Dataset Creation", icon="📝")
@@ -192,7 +193,8 @@ nav = st.navigation(
             receiptscanner_agent,
             receiptscanner_run,
             receiptscanner_documentation,
-            receiptscanner_analytics
+            receiptscanner_analytics,
+            receiptscanner_chat,
         ],
         "ReceiptScanner-Evaluator":[
             receiptscanner_evaluator_home,
