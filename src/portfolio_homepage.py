@@ -1,26 +1,26 @@
 # src/portfolio_homepage.py
-import sys, asyncio
+import sys, asyncio, os
 import streamlit as st
 
 # --- Windows async policy (keep) ---
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# --- Optional theme (KPI look) ---
+# --- Optional theme (safe to skip if not present) ---
 try:
     from provisioning.theme import inject_theme
     inject_theme()
 except Exception:
-    pass  # OK if you don't have custom theme
+    pass
 
-# --- Optional: Doppler & LangSmith setup (only if you use them) ---
+# --- Optional: Doppler & LangSmith bootstrap ---
 def doppler_bootstrap():
     DT = st.secrets.get("DOPPLER_TOKEN")
     DP = st.secrets.get("DOPPLER_PROJECT")
     DC = st.secrets.get("DOPPLER_CONFIG")
     if not (DT and DP and DC):
         return
-    import os, requests
+    import requests
     r = requests.get(
         "https://api.doppler.com/v3/configs/config/secrets",
         params={"project": DP, "config": DC},
@@ -33,134 +33,135 @@ def doppler_bootstrap():
         if val and not os.getenv(k):
             os.environ[k] = str(val)
 
-USE_DOPPLER = bool(st.secrets.get("DOPPLER_TOKEN"))
-if USE_DOPPLER:
+if st.secrets.get("DOPPLER_TOKEN"):
     doppler_bootstrap()
 
-# Export LangSmith keys if you actually use LangSmith
 if any(k in st.secrets for k in ("LANGCHAIN_API_KEY","LANGCHAIN_TRACING_V2","LANGCHAIN_PROJECT")):
-    import os
     for key in ("LANGCHAIN_API_KEY","LANGCHAIN_TRACING_V2","LANGCHAIN_PROJECT"):
         if key in st.secrets and not os.getenv(key):
             os.environ[key] = str(st.secrets[key])
 
-# --- Page config: keep only here ---
-st.set_page_config(page_title="Welcome to Swetha's GenAI Portfolio 👋", layout="wide")
+# --- Page config ---
+st.set_page_config(page_title="Swetha Bommisetti — GenAI Portfolio", layout="wide")
 
-# --- Optional: email + visit logging for Landing page ---
+# --- Optional: email logging ---
 from utils.email_utils import prompt_for_optional_email
 from utils.tracking import log_once_per_page
 
+# ---------------- Landing content (compact) ----------------
 def landing():
-    # ===== Hero =====
+    st.title("Human-trusted AI, not just AI.")
     st.markdown(
-        """
-        <div style="display:flex;align-items:center;gap:12px">
-          <span style="font-size:42px">🤝</span>
-          <h1 style="margin:0">AI Agents — Built like real products</h1>
-        </div>
-        """,
-        unsafe_allow_html=True,
+        "I build and evaluate GenAI agents with **human-in-the-loop** workflows, "
+        "**gold datasets**, and **LangSmith-backed** metrics — so outputs are accurate, fast, and ready for hand-off."
     )
-    st.caption("Hands-on projects, measurable evals, and clear roadmaps. Built and documented by **Swetha Bommisetti**.")
 
-    # Recruiter email (optional)
+    # CTAs (native Streamlit)
+    c1, c2, c3 = st.columns([1,1,2])
+    with c1:
+        st.page_link("receiptscanner_homepage.py", label="🧾 Explore ReceiptScanner", icon="↗")
+    with c2:
+        st.page_link("bookrecommender_homepage.py", label="📚 Explore BookRecommender", icon="↗")
+
     with st.expander("Recruiters & collaborators — leave your email (optional)", expanded=False):
         prompt_for_optional_email()
         if st.session_state.get("user_email"):
             log_once_per_page("Portfolio Landing")
 
     st.divider()
-    st.markdown(
-        """
-**Hi, I'm Swetha — a Data & BI Analyst who builds practical, hands-on GenAI agents.**  
-This portfolio shows that even as a newcomer to AI, I can **design, build, and evaluate** production-style agents end-to-end:
-- clean UI with Streamlit  
-- data + storage with Supabase  
-- structured pipelines with LangGraph 
-- measurable quality via custom **Evaluators** and **Gold Datasets**
-- Secrets&Keys
-    - to keep things safe, the project never hard-codes senstive keys. instead
-         - On my laptop, they live in a small private file so i can run everything without exposing passwords
-         - On the cloud, secrets are stored securely in Doppler or Streamlit's built-in valut. When the app runs,
-             the app pulls the keys from doppler via github actions.
-        """
-    )
-    st.divider()
-    # ===== Value props =====
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("### 🧪 Evidence-driven")
-        st.write("Every agent ships with **evaluators** (accuracy, latency, robustness) so you can see progress, not promises.")
-    with c2:
-        st.markdown("### 🧩 End-to-end")
-        st.write("From **ingest → extraction → storage → analytics**, each app is wired to Supabase and observable.")
-    with c3:
-        st.markdown("### 📕 Documented for hand-off")
-        st.write("Each page reads like an internal doc: what it does, decisions made, trade-offs, and next steps.")
+
+    # Value pillars (short)
+    p1, p2, p3 = st.columns(3)
+    with p1:
+        st.subheader("🧪 Evidence-driven")
+        st.caption("Evaluators for accuracy, latency, and robustness so you see progress, not promises.")
+    with p2:
+        st.subheader("🧩 End-to-end")
+        st.caption("Ingest → extraction → storage → analytics. Wired to Supabase and observable.")
+    with p3:
+        st.subheader("📕 Hand-off ready")
+        st.caption("Each page doubles as internal documentation: decisions, trade-offs, and next steps.")
 
     st.divider()
 
-    # ===== Featured projects =====
-    st.markdown("## Featured Projects")
-    f1, f2 = st.columns([1.2, 1])
-    with f1:
-        st.markdown("#### 🧾 ReceiptScanner")
-        st.write(
-            "- Extracts store, total, date & line items from receipt images.\n"
-            "- Public **gold datasets** can be imported; users can create gold labels.\n"
-            "- Robustness tests with **altered images** (rotate/blur/etc.)."
+    # ---------- Featured Projects (NOW TABS to reduce scroll) ----------
+    st.header("Featured Projects")
+    tabs = st.tabs(["🧾 ReceiptScanner", "📚 BookRecommender"])
+
+    # --- TAB 1: ReceiptScanner ---
+    with tabs[0]:
+        left, right = st.columns([1.4, 0.6])
+        with left:
+            st.subheader("ReceiptScanner")
+            st.write(
+                "- **Purpose:** Built and evaluated a GenAI receipt extraction agent to digitize household and multi-vendor expenses after Mint.com’s shutdown — ensuring reliable data capture and measurable robustness across layouts."
+            )
+            # Quick actions
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                st.page_link("receiptscanner_homepage.py", label="Live Demo", icon="▶️")
+            with a2:
+                st.page_link("pages/12_receiptscanner_documentation.py", label="Docs", icon="📑")
+            with a3:
+                st.page_link("pages/14_evaluator_home.py", label="Evaluations", icon="🧮")
+
+            # Details collapse to save space
+            with st.expander("Show details (Evaluator Persona, Stack)", expanded=False):
+                st.write(
+                    "- **Evaluator Persona:** Validates extraction accuracy, labeling robustness, and consistency using gold datasets.\n"
+                    "- **Stack:** Streamlit • Supabase (Postgres + Storage) • LangGraph • Groq Llama-3.1"
+                )
+        with right:
+            st.caption("**Quality focus**")
+            st.write("Accuracy, latency & robustness benchmarking via LangSmith.")
+
+    # --- TAB 2: BookRecommender ---
+    with tabs[1]:
+        left, right = st.columns([1.4, 0.6])
+        with left:
+            st.subheader("BookRecommender")
+            st.write(
+                "- **Purpose:** Designed and evaluated a GenAI book recommender to help parents find age-appropriate and theme-based books for their children — ensuring factual, unbiased, and engaging suggestions."
+            )
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                st.page_link("bookrecommender_homepage.py", label="Live Demo", icon="▶️")
+            with a2:
+                st.page_link("pages/32_bookrecommender_documentation.py", label="Docs", icon="📑")
+            with a3:
+                st.page_link("pages/33_bookrecommender_analytics.py", label="Analytics", icon="📊")
+
+            with st.expander("Show details (Evaluator Persona, Stack, Note)", expanded=False):
+                st.write(
+                    "- **Evaluator Persona:** Assesses prompt quality, bias, and latency through structured test sets.\n"
+                    "- **Stack:** Streamlit UI • simple vector search • structured prompts\n\n"
+                    "_Note: Inspired by a real challenge at home — finding meaningful books for growing kids. Once validation is complete, it will be deployed for real family use._"
+                )
+        with right:
+            st.caption("**Quality focus**")
+            st.write("Recommendation diversity and response-time transparency.")
+
+    st.divider()
+
+    # ---------- Explore table (collapsed by default to save height) ----------
+    with st.expander("🧭 Explore My Projects (what each page contains)", expanded=False):
+        st.markdown(
+            """
+Each project includes dedicated pages so you can **run, understand, and measure** it like a real production system.
+
+| Section | What you’ll find |
+|----------|------------------|
+| **Execute** | Try the agent live — upload receipts or request recommendations. |
+| **Documentation** | Design choices, architecture decisions, and tech stack explained clearly. |
+| **Analytics** | View simple KPIs and latency metrics. |
+| **Evaluator** | Create gold datasets, tag errors, and measure accuracy, latency, and robustness. |
+| **Utils** | Import public gold data or generate altered images for stress testing. |
+            """
         )
-        st.markdown("**Evaluators:** Header Accuracy, Altered-Image Robustness, Latency, Consistency")
-        st.markdown("**Stack:** Streamlit, Supabase (Postgres + Storage), LangGraph, Groq Llama-3.1")
-    with f2:
-        st.metric("Header Accuracy (demo set)", "—", help="Shown live in the Evaluator pages")
-        st.metric("p50 Latency", "—")
-        st.metric("Robustness (rotate fixed)", "—")
 
-    st.markdown("---")
+    st.caption("Built with Streamlit • Secrets stored in Doppler or Streamlit’s vault • Hosted on Streamlit Community Cloud")
 
-    g1, g2 = st.columns([1.2, 1])
-    with g1:
-        st.markdown("#### 📚 BookRecommender")
-        st.write(
-            "- Suggests children’s books by **theme** & **reading level**.\n"
-            "- Shows **trace/latency** and **prompt iterations** for transparency."
-        )
-        st.markdown("**Stack:** Streamlit UI, simple vector search, structured prompts")
-    with g2:
-        st.metric("Recommendation latency", "—")
-        st.metric("User saves to list", "—")
-
-    st.divider()
-
-    # ===== What each section does (quick map) =====
-    st.markdown("## Site Map — What you’ll find")
-    l, r = st.columns(2)
-    with l:
-        st.markdown("### ReceiptScanner")
-        st.write("**Execute** – upload a receipt and see extraction.")
-        st.write("**Documentation** – tech choices, repo structure, and workflow.")
-        st.write("**Analytics** – simple KPIs and trends.")
-        st.write("**Evaluator** – gold creation, error tagging, accuracy/latency/robustness/consistency.")
-        st.write("**Utils** – import public gold datasets; create altered images for stress tests.")
-    with r:
-        st.markdown("### BookRecommender")
-        st.write("**Execute** – try the recommender.")
-        st.write("**Documentation** – design and future roadmap.")
-        st.write("**Analytics** – request/latency view.")
-
-    st.divider()
-
-    # ===== Roadmap & CTA =====
-    st.markdown("## What I’m building next")
-    st.write(
-        "- **Email-to-Summary Agent** for parents of multiple kids across schools/day-care apps.\n"
-        "  Aggregates daily emails into one **smart summary** with highlights and trends."
-    )
-    #st.info("If you’d like a short walkthrough or a sandbox account, drop your email above. Happy to demo live.")
-
-# ---- Pages / Nav (your existing tree) ----
+# ---------------- Nav (kept intact) ----------------
 home = st.Page(landing, title="Landing Page", icon="🏠", default=True)
 
 receiptscanner_agent = st.Page("receiptscanner_homepage.py", title="ReceiptScanner", icon="🧾")
@@ -168,19 +169,21 @@ receiptscanner_run = st.Page("pages/1_receiptscanner_run.py", title="Execute", i
 receiptscanner_documentation = st.Page("pages/12_receiptscanner_documentation.py", title="Documentation", icon="📑")
 receiptscanner_analytics = st.Page("pages/13_receiptscanner_analytics.py", title="Analytics", icon="📊")
 receiptscanner_chat = st.Page("pages/10_receiptscanner_chat.py", title="Chat", icon="💬")
-# Evaluator (ReceiptScanner) pages
-receiptscanner_evaluator_home=st.Page("pages/14_evaluator_home.py",title="Evaluator")
+
+# Evaluator pages
+receiptscanner_evaluator_home = st.Page("pages/14_evaluator_home.py", title="Evaluator")
 receiptscanner_evaluator_manual = st.Page("pages/15_evaluator_manual_scoring.py", title="Evaluator – Gold Dataset Creation", icon="📝")
 receiptscanner_evaluator_errors = st.Page("pages/16_evaluator_error_tagging.py", title="Evaluator – Error Tagging", icon="🏷️")
-receiptscanner_evaluator_header_accuracy=st.Page("pages/18_evaluator_header_accuracy.py",title="Evaluator - Header Accuracy", icon="🧮")
-receiptscanner_evaluator_altered_images_accuracy=st.Page("pages/20_evaluator_altered_images.py",title="Evaluator - Images Accuracy-Altered Images", icon="🧪️")
-receiptscanner_evaluator_latency=st.Page("pages/21_evaluator_latency.py",title="Evaluator - Latency", icon="📝")
-receiptscanner_evaluator_consistency=st.Page("pages/21_evaluator_consistency.py",title="Evaluator - Consistency", icon="📝")
+receiptscanner_evaluator_header_accuracy = st.Page("pages/18_evaluator_header_accuracy.py", title="Evaluator – Header Accuracy", icon="🧮")
+receiptscanner_evaluator_altered_images_accuracy = st.Page("pages/20_evaluator_altered_images.py", title="Evaluator – Images Accuracy (Altered Images)", icon="🧪")
+receiptscanner_evaluator_latency = st.Page("pages/21_evaluator_latency.py", title="Evaluator – Latency", icon="⏱️")
+receiptscanner_evaluator_consistency = st.Page("pages/21_evaluator_consistency.py", title="Evaluator – Consistency", icon="🧭")
 
-# Utils (ReceiptScanner) pages
-receiptscanner_utils_home=st.Page("pages/17_utils_home.py",title="Gold Dataset Ingest")
-receiptscanner_utils_pertubed=st.Page("pages/19_utils_altered_images.py",title="Altered Images Creation")
+# Utils
+receiptscanner_utils_home = st.Page("pages/17_utils_home.py", title="Gold Dataset Ingest")
+receiptscanner_utils_pertubed = st.Page("pages/19_utils_altered_images.py", title="Altered Images Creation (Perturbed)")
 
+# BookRecommender
 bookrecommender_agent = st.Page("bookrecommender_homepage.py", title="BookRecommender", icon="📚")
 bookrecommender_run = st.Page("pages/3_bookrecommender_run.py", title="Execute", icon="🚀")
 bookrecommender_documentation = st.Page("pages/32_bookrecommender_documentation.py", title="Documentation", icon="📑")
@@ -196,7 +199,7 @@ nav = st.navigation(
             receiptscanner_analytics,
             receiptscanner_chat,
         ],
-        "ReceiptScanner-Evaluator":[
+        "ReceiptScanner-Evaluator": [
             receiptscanner_evaluator_home,
             receiptscanner_evaluator_manual,
             receiptscanner_evaluator_errors,
@@ -205,7 +208,7 @@ nav = st.navigation(
             receiptscanner_evaluator_latency,
             receiptscanner_evaluator_consistency,
         ],
-        "ReceiptScanner-Utils":[
+        "ReceiptScanner-Utils": [
             receiptscanner_utils_home,
             receiptscanner_utils_pertubed,
         ],

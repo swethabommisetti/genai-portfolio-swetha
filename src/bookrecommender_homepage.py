@@ -15,13 +15,13 @@ left, right = st.columns(2)
 with left:
     st.subheader("Problem Statement")
     st.markdown(
-        "- Not to Pick the Same Book We Already Read/Checked Out Previously\n"
+        "- Suggest New Books\n"
 
     )
 with right:
     st.subheader("What This Tool Solves")
     st.markdown(
-        "- One-click agent to pick a book that we have NOT Picked before \n"
+        "- One-click agent to pick a book that we have NOT Picked before- WIP \n"
 
     )
 

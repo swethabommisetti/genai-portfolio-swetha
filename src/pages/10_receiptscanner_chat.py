@@ -7,17 +7,44 @@ from utils.supabase_utils import get_supabase_client
 st.set_page_config(page_title="Receipt Scanner Chat + Prompt A/B", page_icon="🧾", layout="wide")
 st.title("🧾 Receipt Scanner — Chat over Supabase (with Prompt A/B)")
 
+# --- tiny CSS so results always wrap & stay boxed ---
+st.markdown(
+    """
+    <style>
+      .result-box {
+        border: 1px solid var(--secondary-background-color, #333);
+        border-radius: .6rem;
+        padding: .85rem 1rem;
+        margin-top: .35rem;
+        background: rgba(255,255,255,.03);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # --- Supabase client / secrets ---
 sb = get_supabase_client()
-
 def get_secret(name: str, default=None):
     return st.secrets.get(name, os.getenv(name, default))
-
 GROQ_API_KEY = get_secret("GROQ_API_KEY")
 
+# --- helpers for dates/months ---
 def month_start(d=None):
     d = d or dt.date.today()
     return d.replace(day=1)
+
+def to_date_series(s):
+    """Coerce a pandas Series to datetime.date (safe)."""
+    if s is None:
+        return s
+    try:
+        return pd.to_datetime(s, errors="coerce").dt.date
+    except Exception:
+        return s  # leave as-is if cannot convert
 
 HELP = [
   "How much did I spend in the last 30 days?",
@@ -68,7 +95,6 @@ with main:
         if isinstance(payload, list):
             return len(payload) > 0
         if isinstance(payload, dict):
-            # specific cases
             if "daily" in payload:
                 return bool(payload.get("daily")) or float(payload.get("total_spend_last_30d", 0)) > 0
             for key in ("spend", "avg_ticket", "receipt_count", "avg_items_per_receipt"):
@@ -81,8 +107,15 @@ with main:
     def q_spend_30d():
         r = sb.table("rx_v_spend_daily").select("*").order("day", desc=False).execute()
         df = pd.DataFrame(r.data or [])
-        total30 = df[df["day"] >= (dt.date.today() - dt.timedelta(days=30))]["spend"].sum() if not df.empty else 0
-        return {"total_spend_last_30d": float(total30), "daily": df.tail(30).to_dict("records")}
+        if df.empty:
+            return {"total_spend_last_30d": 0.0, "daily": []}
+        # FIX: coerce 'day' -> date for comparison
+        df["day"] = to_date_series(df.get("day"))
+        cutoff = dt.date.today() - dt.timedelta(days=30)
+        mask = df["day"] >= cutoff
+        total30 = float(df.loc[mask, "spend"].astype(float).sum()) if "spend" in df.columns else 0.0
+        last30 = df.loc[mask, ["day", "spend"]] if {"day","spend"} <= set(df.columns) else df
+        return {"total_spend_last_30d": total30, "daily": last30.to_dict("records")}
 
     def q_spend_this_month():
         m = str(month_start())
@@ -130,7 +163,7 @@ with main:
              .select("*")
              .ilike("merchant_name", f"%{mname}%")
              .order("month", desc=False).execute())
-        return r.data
+        return r.data or []
 
     def q_avg_ticket_this_month():
         m = str(month_start())
@@ -159,16 +192,16 @@ with main:
     def q_avg_items_this_month():
         m = str(month_start())
         r = sb.table("rx_v_items_per_receipt_monthly").select("*").eq("month", m).execute()
-        val = float(r.data[0]["avg_items_per_receipt"]) if r.data else 0.0
-        return {"month": m, "avg_items_per_receipt": val}
+        avgv = float(r.data[0]["avg_items_per_receipt"]) if r.data else 0.0
+        return {"month": m, "avg_items_per_receipt": avgv}
 
     def q_top_items_60d():
         r = sb.table("rx_v_items_60d").select("*").limit(20).execute()
-        return r.data
+        return r.data or []
 
     def q_max_receipts_90d():
         r = sb.table("rx_v_max_receipts_90d").select("*").limit(20).execute()
-        return r.data
+        return r.data or []
 
     INTENT_TO_FUNC = {
         "spend_30d": q_spend_30d,
@@ -222,17 +255,24 @@ with main:
         "- No numbers not present in facts. 4 sentences max."
     )
 
-    # -------- Chat flow --------
+    # -------- session + top action row --------
     if "chat" not in st.session_state:
         st.session_state.chat = []
+
+    top_a, _ = st.columns([1, 7])
+    with top_a:
+        if st.button("🧹 Clear results"):
+            st.session_state.chat.clear()
+            st.rerun()
 
     for role, msg in st.session_state.chat:
         with st.chat_message(role):
             st.markdown(msg)
 
     q = st.chat_input("Ask one of the 10 supported questions…")
+
     if q:
-        # Clear previous QA so only newest shows (history is still available via your data views)
+        # single-turn behavior: show only the latest results
         st.session_state.chat.clear()
 
         st.session_state.chat.append(("user", q))
@@ -245,30 +285,27 @@ with main:
         with st.expander("Raw data from Supabase (read-only views)", expanded=False):
             st.write(data)
 
-        # If no data, skip A/B and inform politely
         if not has_data(data):
             st.info("No data found for that question/period. Try another question.")
         else:
-            # Build facts JSON and run A/B
             facts = pd.DataFrame(data).to_json(orient="records") if isinstance(data, list) else str(data)
 
             c1, c2 = st.columns(2)
             with c1:
-                st.subheader("Prompt A")
+                st.markdown("#### Prompt A")
                 outA, latA = narrate(PROMPT_A, facts)
-                st.markdown(outA)
+                st.markdown(f"<div class='result-box'>{outA}</div>", unsafe_allow_html=True)
                 st.caption(f"Latency: {latA} ms")
 
             with c2:
-                st.subheader("Prompt B (guided)")
+                st.markdown("#### Prompt B (guided)")
                 outB, latB = narrate(PROMPT_B, facts)
-                st.markdown(outB)
+                st.markdown(f"<div class='result-box'>{outB}</div>", unsafe_allow_html=True)
                 st.caption(f"Latency: {latB} ms")
 
             st.session_state.chat.append(("assistant", outB))
 
         st.divider()
-        restart = st.button("🔄 ReStart A/B Testing", type="primary", use_container_width=True)
-        if restart:
+        if st.button("🔄 ReRun A/B", type="primary", use_container_width=True):
             st.session_state.chat.clear()
             st.rerun()

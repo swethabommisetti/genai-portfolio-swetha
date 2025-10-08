@@ -1,38 +1,69 @@
 import streamlit as st
 
-st.set_page_config(page_title="ReceiptScanner", layout="wide")
+st.set_page_config(page_title="Receipt Scanner Agent", layout="wide")
 
-st.title("Receipt Scanner Agent")
-st.caption("Digitize Day to Day Receipts")
+# ---- Title and tagline ----
+st.title("🧾 Receipt Scanner Agent")
+st.caption("Digitize and validate receipts with GenAI + Human-in-the-Loop evaluations.")
 
-# CTA → go to pages/1_receiptscanner_run.py
-if st.button("Run the Scan", use_container_width=False):
+# ---- Short intro (adds recruiter context) ----
+st.markdown(
+    """
+This agent extracts structured purchase data from scanned receipts across vendors using **OCR and LangGraph pipelines**.
+It was first built to solve a real household need after Mint.com’s shutdown — and later evolved into a
+**production-style GenAI evaluation project** to measure accuracy, latency, and consistency.
+    """
+)
+
+# ---- Primary CTA ----
+if st.button("▶️ Run the Scan", use_container_width=False):
     st.switch_page("pages/1_receiptscanner_run.py")
 
+st.divider()
 
-# (Your cards/sections)
-left, right = st.columns(2)
-with left:
-    st.subheader("Problem Statement")
-    st.markdown(
-        "- Digitizing Receipts Across Vendors when using different credit cards is tough after mint.com is not available anymore \n"
-        "- As a homemaker have to make sure I don't Purchase Same Item Multiple times\n"
+# ---- Problem and Solution sections (vertical layout, easier to read) ----
+st.subheader("💡 Problem Statement")
+st.markdown(
+    """
+- After **Mint.com** was discontinued, tracking expenses across multiple credit cards became tedious.
+- Needed a simple way to **digitize household receipts** and prevent duplicate purchases.
+    """
+)
 
+st.subheader("🚀 What This Tool Solves")
+st.markdown(
+    """
+- Automates receipt digitization and validation across vendors using **GenAI and Supabase**.
+- Demonstrates **agentic workflows** with evaluation loops for accuracy, latency, and robustness.
+- Bridges a real-world household need with **enterprise-quality AI evaluation design**.
+    """
+)
 
-    )
-with right:
-    st.subheader("What This Tool Solves")
-    st.markdown(
-        "- Allows me to learn Agentic AI with Evaluations \n"
-        "- Solves my real world problem"
-    )
+st.divider()
 
-c1, c2, c3,c4  = st.columns(4)
-if c1.button("Upload"):
-    st.switch_page("pages/1_receiptscanner_run.py")
-if c2.button("Extract"):
-    st.switch_page("pages/12_receiptscanner_documentation.py")  # if your extract UI is here, otherwise point to the actual extract page
-if c3.button("Analytics"):
-    st.switch_page("pages/13_receiptscanner_analytics.py")
-if c4.button("Chat"):
-    st.switch_page("pages/10_receiptscanner_chat.py")
+# ---- Action buttons ----
+st.markdown("### 🔍 Explore Tool Sections")
+cols = st.columns(4)
+
+with cols[0]:
+    if st.button("📤 Upload"):
+        st.switch_page("pages/1_receiptscanner_run.py")
+
+with cols[1]:
+    if st.button("⚙️ Extract"):
+        st.switch_page("pages/12_receiptscanner_documentation.py")  # update if your Extract UI is elsewhere
+
+with cols[2]:
+    if st.button("📊 Analytics"):
+        st.switch_page("pages/13_receiptscanner_analytics.py")
+
+with cols[3]:
+    if st.button("💬 Chat"):
+        st.switch_page("pages/10_receiptscanner_chat.py")
+
+st.divider()
+
+# ---- Optional: small summary footer ----
+st.caption(
+    "Built with Streamlit • Evaluated using LangSmith • Data stored in Supabase • OCR powered by Mistral/LangGraph"
+)
